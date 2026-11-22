@@ -187,11 +187,12 @@ function myTurn(){return mode!=='online'||(race&&net.started&&!race.over&&race.c
 function setControls(){
  const en=myTurn()&&!playing;
  document.querySelectorAll('#controls .step,#controls input').forEach(e=>e.disabled=!en);
- $('fire').disabled=!en; $('fire').textContent=mode==='online'&&!myTurn()?'AGUARDE':'LANÇAR';
+ $('fire').disabled=!en; $('fire').textContent=mode==='online'&&!myTurn()?'AGUARDE':'LANÇAR'; upd();
 }
 function upd(){
- $('aVal').textContent=fmt(+$('aR').value)+'°';
- $('vVal').textContent=fmt(+$('vR').value)+' m/s';
+ const hid=mode==='online'&&!myTurn();
+ $('aVal').textContent=hid?'—':fmt(+$('aR').value)+'°';
+ $('vVal').textContent=hid?'—':fmt(+$('vR').value)+' m/s';
  $('gVal').textContent=fmt(+$('gR').value,2)+' G';
 }
 function toast(m,ms=2600){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),ms)}
@@ -255,7 +256,7 @@ function fire(){
  if(playing||!myTurn())return;
  const a=+$('aR').value, v=+$('vR').value;
  if(guide)guideUsed=true;
- if(mode==='online'){setControls();$('fire').disabled=true;net.host?hostShot(net.me,a,v):net.hostConn&&net.hostConn.send({t:'shot',a,v});return}
+ if(mode==='online'){myAim={lv:level,a,v};setControls();$('fire').disabled=true;net.host?hostShot(net.me,a,v):net.hostConn&&net.hostConn.send({t:'shot',a,v});return}
  tries++; hud();
  const res=simulate(lvl,a,v);
  play(res,()=>finish(res,a,v));
@@ -306,7 +307,7 @@ function resultHead(i,hit,msg,touched){
  const p=race.players[i];
  if(p.fin&&hit)return `<h2>CHEGOU!</h2><p><b>${esc(p.name)}</b> passou da fase ${race.target}! Quem ainda não jogou nesta rodada tem a última chance de empatar.</p>`;
  if(hit)return `<h2>CESTA!</h2><p><b>${esc(p.name)}</b> ${touched?'acertou (com aro)':'acertou de chuá'} e avança para a fase ${p.level}.</p>`;
- return `<h2>Errou!</h2><p><b>${esc(p.name)}</b>: ${msg}<br>Continua na fase ${p.level}.</p>`;
+ return `<h2>Errou!</h2><p>${msg?`<b>${esc(p.name)}</b>: ${msg}`:`<b>${esc(p.name)}</b> não acertou.`}<br>Continua na fase ${p.level}.</p>`;
 }
 function newRace(names,target){
  race={target,cur:0,round:1,over:false,players:names.map(n=>mkP(n))};
@@ -315,9 +316,16 @@ function newRace(names,target){
 function viewTurn(){
  const i=race.cur,p=race.players[i];
  if(!lvl||level!==p.level||lvl._seed!==seedOf(p.level))startLevel(p.level);
- tries=p.lt; ghost=ghosts[i]||[];
- if(p.at===p.level&&p.v){$('aR').value=p.a;$('vR').value=p.v;upd()}
- hud();
+ tries=p.lt;
+ if(mode==='online'){
+  // online: cada um só vê os próprios parâmetros e a própria trajetória
+  trail=[]; ghost=i===net.me?(ghosts[net.me]||[]):[];
+  if(i===net.me&&myAim.lv===p.level){$('aR').value=myAim.a;$('vR').value=myAim.v}
+ } else {
+  ghost=ghosts[i]||[];
+  if(p.at===p.level&&p.v){$('aR').value=p.a;$('vR').value=p.v}
+ }
+ upd(); hud();
 }
 function turn(showCard=true){
  mode='corrida'; document.body.classList.remove('treino');
@@ -374,6 +382,7 @@ function setup(){
 }
 
 // ===== ONLINE: cada um no seu aparelho (conexão direta, sem conta) =====
+let myAim={lv:0,a:45,v:0};
 const net={on:false,host:false,peer:null,conns:new Map(),hostConn:null,me:-1,code:'',started:false,busy:false,pending:null,lastAim:0};
 const CODE_CH='ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const genCode=()=>Array.from({length:5},()=>CODE_CH[Math.floor(Math.random()*CODE_CH.length)]).join('');
@@ -437,7 +446,14 @@ async function hostRoom(name){
  peer.on('connection',c=>{c.on('data',d=>hostData(c,d));c.on('close',()=>hostDrop(c))});
 }
 function bcast(m){for(const {c} of net.conns.values())if(c.open)try{c.send(m)}catch(e){}}
-function sendState(last){const m={t:'state',race,started:net.started,last:last||null};bcast(m);onState(m)}
+// cada aparelho recebe só os próprios parâmetros e o próprio diagnóstico de erro
+function viewFor(idx,last){
+ const R=JSON.parse(JSON.stringify(race));
+ R.players.forEach((p,j)=>{if(j!==idx){p.a=45;p.v=0;p.at=0}});
+ let L=last||null; if(L&&L.i!=null&&L.i!==idx)L={...L,msg:''};
+ return {t:'state',race:R,started:net.started,last:L};
+}
+function sendState(last){for(const {c,i} of net.conns.values())if(c.open)try{c.send(viewFor(i,last))}catch(e){}onState(viewFor(0,last))}
 function hostData(c,d){
  if(d.t==='hello'){
   let nm=String(d.name||'Jogador').slice(0,16), i=race.players.findIndex(p=>!p.on&&p.name===nm);
@@ -449,7 +465,7 @@ function hostData(c,d){
   c.send({t:'welcome',me:i,code:net.code});
   toast(nm+' entrou na sala'); sendState();
  } else if(d.t==='shot'){const e=net.conns.get(c.peer);if(e)hostShot(e.i,+d.a,+d.v)}
- else if(d.t==='aim'){const e=net.conns.get(c.peer);if(e&&e.i===race.cur){for(const [k,o] of net.conns)if(k!==c.peer&&o.c.open)try{o.c.send(d)}catch(x){}onAim(d)}}
+
 }
 function hostDrop(c){
  const e=net.conns.get(c.peer); if(!e)return;
@@ -462,7 +478,7 @@ function hostStart(){
  race.players.forEach(p=>Object.assign(p,{level:1,tries:0,lt:0,hits:0,fin:0,a:45,v:0,at:0}));
  race.players=race.players.filter((p,i)=>p.on||i===0);
  let i=0; for(const [k,o] of net.conns){o.i=race.players.findIndex(p=>p.pid===k);try{o.c.send({t:'welcome',me:o.i,code:net.code})}catch(e){}}
- Object.assign(race,{cur:0,round:1,over:false}); net.started=true; ghosts=[]; net.busy=false;
+ Object.assign(race,{cur:0,round:1,over:false}); net.started=true; ghosts=[]; net.busy=false; myAim.lv=0;
  sendState({begin:1});
 }
 function hostShot(i,a,v){
@@ -470,7 +486,7 @@ function hostShot(i,a,v){
  net.busy=true;
  const p=race.players[i], L=makeLevel(p.level,seedOf(p.level),null);
  const res=simulate(L,a,v), msg=missMsg(res,L);
- const pm={t:'play',i,a,v,res}; bcast(pm); onPlay(pm);
+ const pm={t:'play',i,res}; bcast(pm); onPlay(pm);
  applyResult(race,res.scored,p.lt+1,a,v);
  net.busy=false;
  sendState({i,hit:res.scored,msg,touched:res.hit,win:race.over});
@@ -495,34 +511,26 @@ function clientData(d){
  if(d.t==='welcome'){net.me=d.me;net.on=true;mode='online';document.body.classList.remove('treino')}
  else if(d.t==='state')onState(d);
  else if(d.t==='play')onPlay(d);
- else if(d.t==='aim')onAim(d);
+
  else if(d.t==='bye'){net.on=false;netError('O anfitrião encerrou a sala.')}
 }
 
 // --- comum a todos os aparelhos ---
-function onAim(d){if(myTurn()||playing)return;$('aR').value=d.a;$('vR').value=d.v;upd()}
-function sendAim(){
- if(mode!=='online'||!myTurn())return;
- const now=Date.now(); if(now-net.lastAim<90)return; net.lastAim=now;
- const m={t:'aim',a:+$('aR').value,v:+$('vR').value};
- if(net.host)bcast(m);else if(net.hostConn&&net.hostConn.open)net.hostConn.send(m);
-}
 function onPlay(d){
- const p=race.players[d.i];
+ const p=race.players[d.i], mine=d.i===net.me;
  if(level!==p.level)startLevel(p.level);
- ghost=ghosts[d.i]||[];
- $('aR').value=d.a;$('vR').value=d.v;upd();
+ ghost=mine?(ghosts[net.me]||[]):[];
  tries=p.lt+1; hud();
- play(d.res,()=>{ghosts[d.i]=d.res.scored?[]:ghost;const s=net.pending;net.pending=null;if(s)onState(s);else setControls()});
+ play(d.res,()=>{if(mine)ghosts[net.me]=d.res.scored?[]:ghost;const s=net.pending;net.pending=null;if(s)onState(s);else setControls()});
 }
 function onState(d){
  if(playing){net.pending=d;return}
- race=d.race; net.started=d.started;
+ if(!net.host)race=d.race; net.started=d.started;
  if(net.me>=race.players.length)net.me=race.players.findIndex(p=>p.pid===(net.peer&&net.peer.id));
  if(!net.started){if(!lvl)startLevel(1);hud();return lobbyCard()}
  viewTurn();
  const L=d.last;
- if(L&&L.begin){ghosts=[];card(`<h2>Começou!</h2><p>Corrida até a fase ${race.target}. Ordem: ${race.players.map(p=>esc(p.name)).join(', ')}.</p>${race.cur===net.me?'<p><b>Você começa!</b></p>':''}<button class="cta" id="ok">${race.cur===net.me?'Jogar':'OK'}</button>`);$('ok').onclick=hide;return}
+ if(L&&L.begin){ghosts=[];myAim.lv=0;card(`<h2>Começou!</h2><p>Corrida até a fase ${race.target}. Ordem: ${race.players.map(p=>esc(p.name)).join(', ')}.</p>${race.cur===net.me?'<p><b>Você começa!</b></p>':''}<button class="cta" id="ok">${race.cur===net.me?'Jogar':'OK'}</button>`);$('ok').onclick=hide;return}
  if(L&&L.win)return winner();
  if(L&&L.i!=null){
   const mine=race.cur===net.me, np=race.players[race.cur];
@@ -594,14 +602,14 @@ function draw(){
  const path=(pts,col,w,dash)=>{if(pts.length<2)return;ctx.strokeStyle=col;ctx.lineWidth=w;ctx.setLineDash(dash||[]);ctx.beginPath();pts.forEach((q,i)=>i?ctx.lineTo(X(q[0]),Y(q[1])):ctx.moveTo(X(q[0]),Y(q[1])));ctx.stroke();ctx.setLineDash([])};
  path(ghost,'rgba(255,255,255,.35)',2,[3,5]);
  path(trail,'rgba(255,210,58,.9)',2.5);
- if(!playing&&guide)path(predict(.35),'rgba(255,255,255,.95)',3,[2,6]);
+ if(!playing&&guide&&myTurn())path(predict(.35),'rgba(255,255,255,.95)',3,[2,6]);
  const a=+$('aR').value*Math.PI/180,k=S,fx=X(L.px),fy=Y(L.h1);
  ctx.strokeStyle='#14303c';ctx.lineWidth=Math.max(2,.22*k);ctx.lineCap='round';
  ctx.beginPath();ctx.moveTo(fx-.3*k,fy);ctx.lineTo(fx,fy-.9*k);ctx.lineTo(fx+.3*k,fy);ctx.stroke();
  ctx.strokeStyle=isRace()?colorOf(race.cur):'#ffd23a';ctx.lineWidth=Math.max(3,.45*k);ctx.beginPath();ctx.moveTo(fx,fy-.9*k);ctx.lineTo(fx,fy-1.7*k);ctx.stroke();
  ctx.strokeStyle='#14303c';ctx.lineWidth=Math.max(2,.2*k);ctx.beginPath();ctx.moveTo(fx,fy-1.6*k);ctx.lineTo(X(L.lx),Y(L.ly));ctx.stroke();
  ctx.fillStyle='#c98a5e';ctx.beginPath();ctx.arc(fx,fy-2.05*k,Math.max(3,.3*k),0,7);ctx.fill();
- if(!playing){const v=+$('vR').value,len=(1.5+5*v/L.vmax)*S,sx=X(L.lx),sy=Y(L.ly),ex=sx+Math.cos(a)*len,ey=sy-Math.sin(a)*len;
+ if(!playing&&myTurn()){const v=+$('vR').value,len=(1.5+5*v/L.vmax)*S,sx=X(L.lx),sy=Y(L.ly),ex=sx+Math.cos(a)*len,ey=sy-Math.sin(a)*len;
   ctx.strokeStyle='#ffd23a';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(sx,sy);ctx.lineTo(ex,ey);ctx.stroke();
   ctx.fillStyle='#ffd23a';ctx.beginPath();ctx.moveTo(ex+Math.cos(a)*8,ey-Math.sin(a)*8);ctx.lineTo(ex+Math.sin(a)*6,ey+Math.cos(a)*6);ctx.lineTo(ex-Math.sin(a)*6,ey-Math.cos(a)*6);ctx.fill()}
  const bp=playing&&ballPos?ballPos:[L.lx,L.ly,0], rp=Math.max(5,BR*S);
@@ -633,7 +641,7 @@ function loop(t){
 // se a aba ficar em segundo plano, termina a animação para o jogo não travar
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&playing)tick(1e4)});
 
-$('aR').oninput=$('vR').oninput=()=>{upd();sendAim()};
+$('aR').oninput=$('vR').oninput=upd;
 $('gR').oninput=()=>{upd();if(mode==='treino'&&!playing){const keepA=$('aR').value;lvl=makeLevel(level,lvl._seed,+$('gR').value);$('vR').max=lvl.vmax;$('aR').value=keepA;fit();hud()}};
 let hold;
 document.querySelectorAll('.step').forEach(b=>{
