@@ -36,6 +36,9 @@ canvas{display:block;width:100%;height:100%}
 .pd{pointer-events:auto;border:0;border-radius:20px;font:400 15px Bungee,sans-serif;color:#fff;width:96px;height:96px;box-shadow:0 5px 0 rgba(0,0,0,.45);touch-action:none;cursor:pointer;opacity:.88}
 .pd.on{transform:translateY(4px);box-shadow:0 1px 0 rgba(0,0,0,.45);opacity:1}
 #gas{background:linear-gradient(#3bd16f,#1c9a48);width:110px;height:130px}
+#tur{background:linear-gradient(#ff9a1f,#d4560b);font-size:13px;line-height:1.1}
+#tur.off{filter:grayscale(1) brightness(.7);opacity:.6}
+#tur b{display:block;font-size:22px}
 .str{background:rgba(255,255,255,.25);width:92px;height:96px;font-size:30px}
 #cdown{position:absolute;left:50%;top:32%;transform:translate(-50%,-50%);font:400 72px Bungee,sans-serif;color:var(--yel);text-shadow:0 4px 0 #000;pointer-events:none}
 #msg{position:absolute;left:50%;top:18%;transform:translateX(-50%);background:rgba(10,10,14,.8);padding:6px 14px;border-radius:12px;font-weight:800;opacity:0;transition:opacity .25s;pointer-events:none;text-align:center;max-width:90%}
@@ -68,6 +71,7 @@ td{padding:7px 4px;border-bottom:1px solid #eceef2}
 td.r{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 .dot{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:6px;vertical-align:-1px}
 small{color:var(--mut)}
+[hidden]{display:none!important}
 button:focus-visible,input:focus-visible{outline:3px solid var(--yel);outline-offset:2px}
 @media (orientation:portrait){.pd{width:80px;height:80px;font-size:13px}#gas{width:92px;height:110px}.str{width:68px;height:68px}}
 #rot{position:fixed;inset:0;z-index:8;background:#15161a;display:none;flex-direction:column;align-items:center;justify-content:center;gap:18px;text-align:center;padding:24px;font:400 20px/1.2 Bungee,sans-serif}
@@ -88,14 +92,14 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--yel);outline-of
   <div class="box"><small>TEMPO</small><span id="hTime">0:00,0</span></div>
   <div class="box" id="passBox"><small>PASSOU</small><span id="hPass">0</span></div>
   <button class="box hb" id="ctrBtn" hidden><small>INCLINAÇÃO</small>Centrar</button>
-  <div class="box" id="drBox" hidden style="background:#1f6fe0;margin-left:auto"><small>VÁCUO</small>+2/s</div>
+  <div class="box" id="drBox" hidden style="background:#1f6fe0;margin-left:auto"><small>VÁCUO</small>ativo</div>
   <div class="box" id="spd"><small>KM/H</small><span id="hSpd">0</span></div>
  </div>
  <div id="cdown"></div>
  <div id="msg"></div>
  <div id="pedals">
   <div class="grp"><button class="pd str" id="lft" aria-label="Esquerda">◀</button><button class="pd str" id="rgt" aria-label="Direita">▶</button></div>
-  <div class="grp"><button class="pd" id="gas">ACELERA</button></div>
+  <div class="grp"><button class="pd" id="tur" hidden>TURBO<b id="turN">2</b></button><button class="pd" id="gas">ACELERA</button></div>
  </div>
 </div>
 <div id="overlay"><div class="card" id="card"></div></div>
@@ -104,7 +108,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--yel);outline-of
 <script>
 {
 const $=id=>document.getElementById(id);
-const cv=$('cv'),ctx=cv.getContext('2d');
+const cv=$('cv'); let ctx=cv.getContext('2d');
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const mod=(a,m)=>((a%m)+m)%m, clamp=(v,a,b)=>Math.max(a,Math.min(b,v)), lerp=(a,b,t)=>a+(b-a)*t;
 const fmtT=t=>{const m=Math.floor(t/60),s=t-m*60;return m+':'+(s<10?'0':'')+s.toFixed(1).replace('.',',')};
@@ -123,7 +127,7 @@ L=segs.length*SEG; START=140*SEG;
 const segAt=z=>segs[Math.floor(mod(z,L)/SEG)];
 
 // ===== ESTADO =====
-let prefs={name:'',color:'#e3262f',num:7,steer:'',inv:false,sens:20,laps:3,best:{}};
+let prefs={name:'',color:'#e3262f',model:'stock',num:7,steer:'',inv:false,sens:20,laps:3,best:{}};
 try{prefs=Object.assign(prefs,JSON.parse(localStorage.getItem('ovalturbo')||'{}'))}catch(e){}
 const savePrefs=()=>{try{localStorage.setItem('ovalturbo',JSON.stringify(prefs))}catch(e){}};
 const hasTilt='DeviceMotionEvent' in window&&('ontouchstart' in window||navigator.maxTouchPoints>0);
@@ -135,14 +139,20 @@ const keys={}, btn={gas:0,lft:0,rgt:0};
 function rng(seed){return()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
 function makeTraffic(seed){
  const r=rng(seed), cols=['#9aa3ad','#4c79c9','#f5f5f5','#2f8f6b','#c9a227','#8c5a3c','#b04a8f','#5ac8e0'], out=[];
- for(let i=0;i<14;i++)out.push({z0:START+3000+i*(L/14)+r()*3000,x:[-0.66,0,0.66][Math.floor(r()*3)],s:MAXS*(0.32+r()*0.28),col:cols[Math.floor(r()*cols.length)],num:10+Math.floor(r()*89),prev:null});
+ for(let i=0;i<14;i++)out.push({z0:START+3000+i*(L/14)+r()*3000,x:[-0.66,0,0.66][Math.floor(r()*3)],s:MAXS*(0.32+r()*0.28),col:cols[Math.floor(r()*cols.length)],num:10+Math.floor(r()*89),model:['stock','stock','gt','formula'][Math.floor(r()*4)],prev:null});
  return out;
 }
 const tz=c=>mod(c.z0+c.s*(R?R.t:0),L);
+let oil=[];
+function makeOil(seed){
+ const r=rng(seed*7+3), out=[];
+ for(let i=0;i<7;i++)out.push({z:mod(START+6000+i*(L/7)+r()*(L/10),L),x:[-0.62,0,0.62][Math.floor(r()*3)]+(r()-.5)*0.2,last:-1});
+ return out;
+}
 
 function newRace(laps,seed,online){
- traffic=makeTraffic(seed);
- R={laps,seed,online,t:0,cd:3.6,run:false,dist:0,speed:0,x:online?[-0.66,0,0.66][Math.max(0,net.me)%3]:0,lapIdx:0,lapStart:0,best:null,passes:0,fin:false,steer:0,draft:false};
+ traffic=makeTraffic(seed); oil=makeOil(seed);
+ R={laps,seed,online,t:0,cd:3.6,run:false,dist:0,speed:0,x:online?[-0.66,0,0.66][Math.max(0,net.me)%3]:0,lapIdx:0,lapStart:0,best:null,passes:0,fin:false,steer:0,draft:false,turbos:2,turboT:0,oilT:0};
  if(online)R.dist=-Math.floor(Math.max(0,net.me)/3)*900;
  tilt.ok=false; document.body.classList.add('racing'); lockLandscape();
  $('posBox').hidden=!online; $('passBox').hidden=!!online; $('ctrBtn').hidden=prefs.steer!=='tilt';
@@ -181,6 +191,14 @@ function tiltFail(why){
  card(`<h2>Inclinação indisponível</h2><p>${why}</p><p>Isso acontece quando o jogo é aberto dentro de outro app (como aqui no Claude), que bloqueia o sensor. Abra pelo link do jogo no navegador (Safari ou Chrome) ou instalado na tela inicial.</p><p>Por enquanto, use os botões ◀ ▶.</p><button class="cta" id="ok">Entendi</button>`);
  $('ok').onclick=hide;
 }
+function canTurbo(){return R&&R.run&&!R.fin&&R.online&&myPos()>1}
+function useTurbo(){
+ if(!R||!R.run||R.fin)return;
+ if(!R.online||myPos()===1){say('Quem lidera não pode usar turbo.');return}
+ if(R.turbos<=0){say('Sem turbo nesta volta.');return}
+ if(R.turboT>0)return;
+ R.turbos--;R.turboT=3;beep(220,.5,'sawtooth');say('TURBO!');
+}
 function centerTilt(){setCenter();say('Volante centralizado')}
 
 // ===== FÍSICA =====
@@ -211,15 +229,23 @@ function update(dt){
  // na reta ganha 1 km/h por segundo (quem está atrás, no vácuo, 1 km/h a cada meio segundo);
  // na curva perde 1 km/h a cada 2 segundos. Nada se acumula: tirou o pé, perdeu, recomeça.
  const inCurve=Math.abs(seg.curve)>0.5, K=MAXS/KMH;
- R.draft=!inCurve&&R.online&&!R.fin&&myPos()>1;
+ const pos=R.online&&!R.fin?myPos():1;
+ R.draft=!inCurve&&pos>1&&!R.fin;
+ const gain=pos===1?1:pos===2?3:5; // km/h por segundo acima de 320, na reta
  if(R.fin)R.speed+=DEC*1.5*dt;
  else if(brk)R.speed+=BRK*dt;
  else if(gas){
   if(R.speed<MAXS)R.speed=Math.min(MAXS,R.speed+ACC*dt*(1-0.55*sp));
   else if(inCurve)R.speed=Math.max(MAXS*0.9,R.speed-K*0.5*dt);
-  else R.speed+=K*dt*(R.draft?2:1);
+  else R.speed+=K*dt*gain;
  }
  else R.speed+=DEC*dt;
+ // turbo: +10 km/h por segundo durante 3 s
+ if(R.turboT>0){R.turboT-=dt;if(!R.fin)R.speed+=K*10*dt}
+ // poça de óleo: perde velocidade e o carro escorrega
+ R.oilT=Math.max(0,R.oilT-dt);
+ {const Pn=mod(START+R.dist,L);for(const o of oil){const rel=mod(o.z-Pn,L),srel=rel>L/2?rel-L:rel;if(Math.abs(srel)<260&&Math.abs(o.x-R.x)<0.3&&o.last!==R.lapIdx&&!R.fin){o.last=R.lapIdx;R.speed*=0.78;R.oilT=0.8;R.slide=(Math.random()<.5?-1:1)*0.9;shake=0.6;beep(70,.3,'sawtooth');say('Óleo na pista!')}}}
+ if(R.oilT>0)R.x+=(R.slide||0)*dt*R.oilT;
  if(R.x<-1.12&&R.speed>OFF)R.speed=Math.max(OFF,R.speed-MAXS*1.1*dt);
  if(R.x>0.98){R.x=0.9;if(R.speed>MAXS*0.2){R.speed*=0.25;sparks=1;shake=1;beep(120,.25,'square');say('No muro! Tire o pé antes da curva.')}}
  R.x=Math.max(R.x,-1.7);
@@ -237,7 +263,7 @@ function update(dt){
  }
  const li=Math.floor(R.dist/L);
  if(R.dist>0&&li>R.lapIdx&&!R.fin){
-  const lt=R.t-R.lapStart; R.lapStart=R.t; R.lapIdx=li;
+  const lt=R.t-R.lapStart; R.lapStart=R.t; R.lapIdx=li; R.turbos=2;
   const rec=R.best==null||lt<R.best; if(rec)R.best=lt;
   if(li>=R.laps)finishRace();
   else{say((li===R.laps-1?'ÚLTIMA VOLTA! ':'Volta ')+fmtT(lt)+(rec&&li>1?' · melhor volta':''));beep(660,.12)}
@@ -272,20 +298,52 @@ function drawSeg(s,p1,p2){
  poly(wx1,p1.yb,wx2,p2.yb,wx2,p2.yb-h2,wx1,p1.yb-h1,c.wall);
  poly(wx1,p1.yb-h1,wx2,p2.yb-h2,wx2,p2.yb-h2*t,wx1,p1.yb-h1*t,s.tight?(c===PAL.light?'#ffcc00':'#15161a'):(c===PAL.light?'#2b62c4':'#e3262f'));
 }
-function drawCar(x,yb,w,col,num,brake,lean){
+const MODELS=[['stock','Stock'],['formula','Fórmula'],['gt','GT']];
+const rr=(x,y,w,h,r)=>{ctx.beginPath();ctx.roundRect?ctx.roundRect(x,y,w,h,r):ctx.rect(x,y,w,h);ctx.fill()};
+function numBadge(x,y,r,num){if(num==null||r<5)return;ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.fill();ctx.fillStyle='#111';ctx.font=`900 ${Math.round(r*1.3)}px Nunito,sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(num,x,y+r*0.05)}
+function drawCar(x,yb,w,col,num,brake,lean,model){
  if(w<2)return;
- const h=w*0.56;
- ctx.fillStyle='rgba(0,0,0,.35)';ctx.beginPath();ctx.ellipse(x,yb,w*0.55,h*0.12,0,0,7);ctx.fill();
- ctx.fillStyle='#111';ctx.fillRect(x-w*0.52,yb-h*0.42,w*0.2,h*0.42);ctx.fillRect(x+w*0.32,yb-h*0.42,w*0.2,h*0.42);
- ctx.fillStyle=col;ctx.beginPath();ctx.roundRect?ctx.roundRect(x-w*0.46+lean,yb-h*0.95,w*0.92,h*0.72,w*0.08):ctx.rect(x-w*0.46,yb-h*0.95,w*0.92,h*0.72);ctx.fill();
- ctx.fillStyle='rgba(0,0,0,.18)';ctx.fillRect(x-w*0.46+lean,yb-h*0.4,w*0.92,h*0.17);
- ctx.fillStyle=col;ctx.beginPath();ctx.roundRect?ctx.roundRect(x-w*0.29+lean*1.4,yb-h*1.2,w*0.58,h*0.34,w*0.06):ctx.rect(x-w*0.29,yb-h*1.2,w*0.58,h*0.34);ctx.fill();
- ctx.fillStyle='#1d2b3a';ctx.fillRect(x-w*0.23+lean*1.4,yb-h*1.13,w*0.46,h*0.22);
- ctx.fillStyle='#1a1a1a';ctx.fillRect(x-w*0.52+lean,yb-h*1.02,w*1.04,h*0.09);
- ctx.fillStyle=brake?'#ff2a2a':'#a31515';ctx.fillRect(x-w*0.42+lean,yb-h*0.78,w*0.16,h*0.12);ctx.fillRect(x+w*0.26+lean,yb-h*0.78,w*0.16,h*0.12);
- if(w>26&&num!=null){ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(x+lean,yb-h*0.68,h*0.17,0,7);ctx.fill();ctx.fillStyle='#111';ctx.font=`900 ${Math.round(h*0.22)}px Nunito,sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(num,x+lean,yb-h*0.67)}
+ const h=w*0.56, tl=brake?'#ff2a2a':'#a31515';
+ ctx.fillStyle='rgba(0,0,0,.35)';ctx.beginPath();ctx.ellipse(x,yb,w*0.56,h*0.12,0,0,7);ctx.fill();
+ if(model==='formula'){
+  // monoposto: rodas grandes expostas, corpo estreito, asa traseira alta e capacete
+  ctx.fillStyle='#111';rr(x-w*0.56,yb-h*0.62,w*0.24,h*0.62,w*0.04);rr(x+w*0.32,yb-h*0.62,w*0.24,h*0.62,w*0.04);
+  ctx.fillStyle='#333';ctx.fillRect(x-w*0.5,yb-h*0.46,w*0.12,h*0.06);ctx.fillRect(x+w*0.38,yb-h*0.46,w*0.12,h*0.06);
+  ctx.fillStyle=col;rr(x-w*0.22+lean,yb-h*0.78,w*0.44,h*0.62,w*0.06);
+  ctx.fillStyle='#222';ctx.fillRect(x-w*0.06+lean,yb-h*1.28,w*0.03,h*0.5);ctx.fillRect(x+w*0.03+lean,yb-h*1.28,w*0.03,h*0.5);
+  ctx.fillStyle=col;rr(x-w*0.5+lean,yb-h*1.42,w*1.0,h*0.18,w*0.03);
+  ctx.fillStyle='rgba(0,0,0,.3)';ctx.fillRect(x-w*0.5+lean,yb-h*1.3,w*1.0,h*0.05);
+  ctx.fillStyle='#f4f4f4';ctx.beginPath();ctx.arc(x+lean*1.3,yb-h*0.95,h*0.17,0,7);ctx.fill();
+  ctx.fillStyle='#1d2b3a';ctx.fillRect(x-h*0.12+lean*1.3,yb-h*1.0,h*0.24,h*0.07);
+  ctx.fillStyle=tl;ctx.fillRect(x-w*0.04+lean,yb-h*0.36,w*0.08,h*0.1);
+  if(w>26)numBadge(x+lean,yb-h*0.56,h*0.14,num);
+ } else if(model==='gt'){
+  // esportivo largo e baixo: vidro traseiro inclinado, rabeta e lanternas redondas
+  ctx.fillStyle='#111';ctx.fillRect(x-w*0.52,yb-h*0.3,w*0.18,h*0.3);ctx.fillRect(x+w*0.34,yb-h*0.3,w*0.18,h*0.3);
+  ctx.fillStyle=col;rr(x-w*0.52+lean,yb-h*0.78,w*1.04,h*0.58,w*0.14);
+  ctx.fillStyle=col;ctx.beginPath();ctx.moveTo(x-w*0.4+lean,yb-h*0.74);ctx.lineTo(x-w*0.22+lean*1.4,yb-h*1.08);ctx.lineTo(x+w*0.22+lean*1.4,yb-h*1.08);ctx.lineTo(x+w*0.4+lean,yb-h*0.74);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#1d2b3a';ctx.beginPath();ctx.moveTo(x-w*0.32+lean,yb-h*0.78);ctx.lineTo(x-w*0.19+lean*1.4,yb-h*1.02);ctx.lineTo(x+w*0.19+lean*1.4,yb-h*1.02);ctx.lineTo(x+w*0.32+lean,yb-h*0.78);ctx.closePath();ctx.fill();
+  ctx.fillStyle='rgba(0,0,0,.35)';ctx.fillRect(x-w*0.5+lean,yb-h*0.82,w*1.0,h*0.06);
+  ctx.fillStyle=tl;for(const k of[-0.38,-0.25,0.25,0.38]){ctx.beginPath();ctx.arc(x+w*k+lean,yb-h*0.58,h*0.07,0,7);ctx.fill()}
+  ctx.fillStyle='rgba(0,0,0,.25)';ctx.fillRect(x-w*0.5+lean,yb-h*0.34,w*1.0,h*0.12);
+  if(w>26)numBadge(x+lean,yb-h*0.5,h*0.13,num);
+ } else {
+  // stock car: caixa alta, aerofólio traseiro reto
+  ctx.fillStyle='#111';ctx.fillRect(x-w*0.52,yb-h*0.42,w*0.2,h*0.42);ctx.fillRect(x+w*0.32,yb-h*0.42,w*0.2,h*0.42);
+  ctx.fillStyle=col;rr(x-w*0.46+lean,yb-h*0.95,w*0.92,h*0.72,w*0.08);
+  ctx.fillStyle='rgba(0,0,0,.18)';ctx.fillRect(x-w*0.46+lean,yb-h*0.4,w*0.92,h*0.17);
+  ctx.fillStyle=col;rr(x-w*0.29+lean*1.4,yb-h*1.2,w*0.58,h*0.34,w*0.06);
+  ctx.fillStyle='#1d2b3a';ctx.fillRect(x-w*0.23+lean*1.4,yb-h*1.13,w*0.46,h*0.22);
+  ctx.fillStyle='#1a1a1a';ctx.fillRect(x-w*0.52+lean,yb-h*1.02,w*1.04,h*0.09);
+  ctx.fillStyle=tl;ctx.fillRect(x-w*0.42+lean,yb-h*0.78,w*0.16,h*0.12);ctx.fillRect(x+w*0.26+lean,yb-h*0.78,w*0.16,h*0.12);
+  if(w>26)numBadge(x+lean,yb-h*0.68,h*0.17,num);
+ }
 }
-function tiltCar(x,yb,w,ang,col,num,brake,lean){ctx.save();ctx.translate(x,yb);ctx.rotate(ang);drawCar(0,0,w,col,num,brake,lean);ctx.restore()}
+function tiltCar(x,yb,w,ang,col,num,brake,lean,model){ctx.save();ctx.translate(x,yb);ctx.rotate(ang);drawCar(0,0,w,col,num,brake,lean,model);ctx.restore()}
+// dia (azul), tarde (laranja), noite (preto): muda a cada 3 voltas
+const SKIES=[{t:[47,111,196],b:[191,224,255],n:0,w:0},{t:[196,84,52],b:[255,190,110],n:0.15,w:0.16},{t:[4,5,14],b:[24,30,62],n:1,w:0}];
+const skyC={t:[47,111,196],b:[191,224,255],n:0,w:0}; let night=0, skyDt=0;
+const STARS=Array.from({length:70},(_,i)=>[(i*0.6180339)%1,((i*0.37)%1),i%3===0?2:1]);
 const CLOUDS=[[0.08,0.10,1.1],[0.3,0.2,0.8],[0.52,0.07,1.3],[0.7,0.24,0.9],[0.9,0.13,1.0],[1.15,0.18,0.7]];
 let cloudT=0;
 function render(){
@@ -297,8 +355,13 @@ function render(){
  ctx.save();
  const sh=shake*6; if(sh)ctx.translate((Math.random()-.5)*sh,(Math.random()-.5)*sh);
  // só o céu, com nuvens discretas que deslizam devagar
- const sky=ctx.createLinearGradient(0,0,0,ch/2);sky.addColorStop(0,'#2f6fc4');sky.addColorStop(1,'#bfe0ff');ctx.fillStyle=sky;ctx.fillRect(-20,-20,cw+40,ch/2+22);
- ctx.fillStyle='rgba(255,255,255,.55)';
+ const ph=R?Math.floor(Math.max(0,R.lapIdx)/3)%3:0, tgt=SKIES[ph];
+ for(const k of['t','b'])for(let i=0;i<3;i++)skyC[k][i]=lerp(skyC[k][i],tgt[k][i],Math.min(1,skyDt*0.6));
+ skyC.n=lerp(skyC.n,tgt.n,Math.min(1,skyDt*0.6)); skyC.w=lerp(skyC.w,tgt.w,Math.min(1,skyDt*0.6)); night=skyC.n;
+ const rgb=a=>`rgb(${a.map(v=>Math.round(v)).join(',')})`;
+ const sky=ctx.createLinearGradient(0,0,0,ch/2);sky.addColorStop(0,rgb(skyC.t));sky.addColorStop(1,rgb(skyC.b));ctx.fillStyle=sky;ctx.fillRect(-20,-20,cw+40,ch/2+22);
+ if(night>0.2){ctx.fillStyle=`rgba(255,255,255,${(night-0.2)*0.9})`;for(const st of STARS)ctx.fillRect(st[0]*cw,st[1]*ch*0.48,st[2],st[2])}
+ ctx.fillStyle=`rgba(255,255,255,${0.55*(1-night*0.8)})`;
  for(const c of CLOUDS){
   const span=cw*1.4, x=mod(c[0]*span-bgOff*cw*0.35-cloudT*6,span)-cw*0.2, y=c[1]*ch, r=Math.min(cw,ch)*0.05*c[2];
   ctx.beginPath();ctx.ellipse(x,y,r*2.2,r*0.7,0,0,7);ctx.ellipse(x+r*1.2,y-r*0.35,r*1.3,r*0.65,0,0,7);ctx.ellipse(x-r*1.1,y-r*0.2,r*1.1,r*0.5,0,0,7);ctx.fill();
@@ -313,9 +376,19 @@ function render(){
   vis.push(s); s.f=frame;
  }
  for(let k=vis.length-1;k>=0;k--)drawSeg(vis[k],vis[k].p1.s,vis[k].p2.s);
+ // poças de óleo
+ for(const o of oil){
+  const rel=mod(o.z-pos,L); if(rel<playerZ*0.5||rel>DRAW*SEG*0.8)continue;
+  const s=segAt(o.z); if(s.f!==frame)continue;
+  const t=mod(o.z,SEG)/SEG, a=s.p1.s, b=s.p2.s, sc=lerp(a.scale,b.scale,t), sx=lerp(a.x,b.x,t);
+  const cx=sx+sc*o.x*RW*cw/2, cy=lerp(lerp(a.y0,b.y0,t),lerp(a.yb,b.yb,t),(o.x+1)/2), rw=sc*0.3*RW*cw/2;
+  if(rw<2)continue;
+  ctx.fillStyle='rgba(10,10,14,.92)';ctx.beginPath();ctx.ellipse(cx,cy,rw,Math.max(1.2,rw*0.2),0,0,7);ctx.ellipse(cx+rw*0.45,cy+rw*0.04,rw*0.55,Math.max(1,rw*0.14),0,0,7);ctx.fill();
+  ctx.fillStyle='rgba(120,90,200,.35)';ctx.beginPath();ctx.ellipse(cx-rw*0.25,cy-rw*0.03,rw*0.35,Math.max(0.8,rw*0.06),0,0,7);ctx.fill();
+ }
  // carros, do mais longe para o mais perto, apoiados na pista inclinada
  const objs=[];
- for(const c of traffic)objs.push({z:tz(c),x:c.x,col:c.col,num:c.num});
+ for(const c of traffic)objs.push({z:tz(c),x:c.x,col:c.col,num:c.num,model:c.model});
  if(R&&R.online)for(const o of others())objs.push(o);
  objs.forEach(o=>o.rel=mod(o.z-pos,L));
  objs.sort((a,b)=>b.rel-a.rel);
@@ -326,13 +399,16 @@ function render(){
   const sc=lerp(a.scale,b.scale,t), sx=lerp(a.x,b.x,t), w0=lerp(a.w,b.w,t);
   const y0=lerp(a.y0,b.y0,t), yb=lerp(a.yb,b.yb,t);
   const w=sc*CARW*RW*cw/2, cx=sx+sc*o.x*RW*cw/2, cy=lerp(y0,yb,(clamp(o.x,-1,1)+1)/2);
-  tiltCar(cx,cy,w,Math.atan2(yb-y0,2*w0),o.col,o.num,false,0);
+  tiltCar(cx,cy,w,Math.atan2(yb-y0,2*w0),o.col,o.num,night>0.4,0,o.model);
   if(o.name&&w>14){ctx.font='800 13px Nunito,sans-serif';ctx.textAlign='center';ctx.textBaseline='alphabetic';const tw=ctx.measureText(o.name).width+10;ctx.fillStyle='rgba(0,0,0,.6)';ctx.fillRect(cx-tw/2,cy-w*0.85-18,tw,17);ctx.fillStyle='#fff';ctx.fillText(o.name,cx,cy-w*0.85-5)}
  }
+ if(skyC.w>0.01){ctx.fillStyle=`rgba(255,120,40,${skyC.w})`;ctx.fillRect(-20,ch/2-2,cw+40,ch/2+24)}
+ if(night>0.01){ctx.fillStyle=`rgba(0,0,22,${night*0.5})`;ctx.fillRect(-20,ch/2-2,cw+40,ch/2+24)}
  // seu carro, inclinado junto com a pista
  const brk=keys.ArrowDown||keys.KeyS||(R&&R.run&&!btn.gas&&!keys.ArrowUp&&!keys.KeyW&&!keys.Space), pw=CARW*RW/CAM_H*cw/2;
  const pang=px>=-1&&px<=1?-Math.atan2(bank*BANK_H,2*RW):0;
- tiltCar(cw/2,ch-4,pw,pang,prefs.color,prefs.num,brk,(R?R.steer:0)*pw*0.04);
+ tiltCar(cw/2,ch-4,pw,pang,prefs.color,prefs.num,brk,(R?R.steer:0)*pw*0.04,prefs.model);
+ if(R&&R.turboT>0){ctx.fillStyle='rgba(255,170,40,.85)';for(let i=0;i<6;i++){const fx=cw/2+(Math.random()-.5)*pw*0.5;ctx.beginPath();ctx.ellipse(fx,ch-pw*0.12+Math.random()*6,pw*0.05,pw*0.09,0,0,7);ctx.fill()}}
  if(sparks>0){ctx.fillStyle='#ffd23a';for(let i=0;i<8;i++)ctx.fillRect(cw/2+pw*0.5+Math.random()*pw*0.3,ch-pw*0.5-Math.random()*pw*0.3,3,3)}
  ctx.restore();
 }
@@ -346,6 +422,7 @@ function hud(dt){
  $('hTime').textContent=fmtT(R.t);
  $('hPass').textContent=R.passes;
  $('drBox').hidden=!R.draft;
+ $('tur').hidden=!R.online; $('turN').textContent=R.turboT>0?'···':R.turbos; $('tur').classList.toggle('off',!canTurbo()||R.turbos<=0||R.turboT>0);
  if(R.online)$('hPos').textContent=myPos()+'º/'+lobby.players.filter(p=>p.on).length;
  const cd=$('cdown');
  cd.textContent=!R.run&&R.cd>0?(R.cd>3?'':Math.ceil(R.cd)):(R.run&&R.t<0.8?'VAI!':'');
@@ -368,7 +445,7 @@ function resize(){const d=Math.min(2,devicePixelRatio||1);cw=innerWidth;ch=inner
 let last=0, paused=false;
 function loop(t){
  const dt=Math.min(.05,(t-last)/1000||0);last=t;
- if(!paused&&!(portrait()&&R&&!R.online))update(dt); cloudT+=dt;
+ if(!paused&&!(portrait()&&R&&!R.online))update(dt); cloudT+=dt; skyDt=dt;
  render(); hud(dt); if(R)sound.set(R.speed/MAXS);
  requestAnimationFrame(loop);
 }
@@ -383,7 +460,9 @@ function bindLaps(get,set){
  $('lR').onclick=()=>{S(1+Math.floor(Math.random()*10));say('Sorteado: '+get()+' volta'+(get()>1?'s':''))};
 }
 function carFields(){
- return `<div class="field"><b>Cor do carro</b><div class="sw">${CARCOLS.map(c=>`<button data-c="${c}" style="background:${c}" class="${c===prefs.color?'sel':''}" aria-label="Cor"></button>`).join('')}</div></div>
+ return `<div class="field"><b>Modelo</b><div class="seg">${MODELS.map(([k,t])=>`<button data-m="${k}" class="${prefs.model===k?'sel':''}">${t}</button>`).join('')}</div></div>
+ <canvas id="carPrev" width="240" height="110" style="width:240px;height:110px;display:block;margin:4px auto;background:#6e6f75;border-radius:14px"></canvas>
+ <div class="field"><b>Cor do carro</b><div class="sw">${CARCOLS.map(c=>`<button data-c="${c}" style="background:${c}" class="${c===prefs.color?'sel':''}" aria-label="Cor"></button>`).join('')}</div></div>
  <div class="field"><b>Número</b>${stepper('n',prefs.num)}</div>
  <div class="field"><b>Direção</b><div class="seg"><button id="sB" class="${prefs.steer==='buttons'?'sel':''}">Botões</button><button id="sT" class="${prefs.steer==='tilt'?'sel':''}">Inclinar</button></div></div>
  <div class="field tiltRow" ${prefs.steer==='tilt'?'':'hidden'}><b>Sensibilidade</b><div class="seg">${[[30,'Baixa'],[20,'Média'],[12,'Alta']].map(([v,t])=>`<button data-s="${v}" class="${prefs.sens===v?'sel':''}">${t}</button>`).join('')}</div></div>
@@ -392,8 +471,11 @@ function carFields(){
  <div class="field tiltRow" ${prefs.steer==='tilt'?'':'hidden'}><b>Inverter inclinação</b><div class="seg"><button id="iN" class="${prefs.inv?'':'sel'}">Não</button><button id="iS" class="${prefs.inv?'sel':''}">Sim</button></div></div>`;
 }
 function bindCar(){
- document.querySelectorAll('.sw button').forEach(b=>b.onclick=()=>{prefs.color=b.dataset.c;savePrefs();document.querySelectorAll('.sw button').forEach(x=>x.classList.toggle('sel',x===b))});
- const N=v=>{prefs.num=clamp(Math.round(v)||1,1,99);$('nI').value=prefs.num;savePrefs()};
+ const prev=()=>{const c=$('carPrev');if(!c)return;const g=c.getContext('2d'),o=ctx;ctx=g;g.clearRect(0,0,240,110);drawCar(120,104,124,prefs.color,prefs.num,false,0,prefs.model);ctx=o};
+ document.querySelectorAll('.sw button').forEach(b=>b.onclick=()=>{prefs.color=b.dataset.c;savePrefs();document.querySelectorAll('.sw button').forEach(x=>x.classList.toggle('sel',x===b));prev()});
+ document.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{prefs.model=b.dataset.m;savePrefs();document.querySelectorAll('[data-m]').forEach(x=>x.classList.toggle('sel',x===b));prev()});
+ setTimeout(prev,0);
+ const N=v=>{prefs.num=clamp(Math.round(v)||1,1,99);$('nI').value=prefs.num;savePrefs();prev()};
  $('nM').onclick=()=>N(prefs.num-1);$('nP').onclick=()=>N(prefs.num+1);$('nI').onchange=e=>N(+e.target.value);
  const st=m=>{prefs.steer=m;savePrefs();$('sT').classList.toggle('sel',m==='tilt');$('sB').classList.toggle('sel',m==='buttons');document.querySelectorAll('.tiltRow').forEach(r=>r.hidden=m!=='tilt')};
  if($('tTest'))$('tTest').onclick=async()=>{
@@ -414,12 +496,12 @@ function bindCar(){
 function menu(){
  if(R&&R.online&&net.on){card(`<h2>PAUSA</h2><p>Corrida online na sala <b>${net.code}</b>. O jogo continua para os outros.</p><button class="cta" id="bk">Voltar à pista</button><button class="cta alt" id="lv">Sair da sala</button>`);$('bk').onclick=hide;$('lv').onclick=leave;return}
  paused=!!R; sound.stop();
- card(`<h1>OVAL TURBO</h1><p>Corrida no oval com curvas inclinadas. Um dedo no acelerador, o outro na direção. Depois de 320 km/h, de pé embaixo na reta, o carro ganha 1 km/h por segundo; quem está atrás pega o vácuo e ganha o dobro. Dentro da curva perde velocidade: faça a tangência pela linha de dentro, que é mais curta. Nas curvas 1 e 2 (muro amarelo e preto) é preciso dosar o acelerador para não ir para o muro. Desvie dos carros mais lentos: bater na traseira faz perder velocidade.</p>
+ card(`<h1>OVAL TURBO</h1><p>Corrida no oval com curvas inclinadas. Um dedo no acelerador, o outro na direção. Depois de 320 km/h, de pé embaixo na reta, quem lidera ganha 1 km/h por segundo. Quem está em 2º ganha 3 km/h por segundo e do 3º para trás, 5. Quem não lidera tem 2 turbos por volta. Cuidado com as poças de óleo. Dentro da curva perde velocidade: faça a tangência pela linha de dentro, que é mais curta. Nas curvas 1 e 2 (muro amarelo e preto) é preciso dosar o acelerador para não ir para o muro. Desvie dos carros mais lentos: bater na traseira faz perder velocidade.</p>
  ${R&&!R.fin&&!R.online?'<button class="cta" id="rs">Continuar corrida</button>':''}
  <button class="cta${R&&!R.fin&&!R.online?' alt':''}" id="on">Online · corrida com a galera</button>
  <button class="cta alt" id="so">Solo · contra o relógio</button>
  <a class="cta alt" href="../" style="text-decoration:none;line-height:48px">← Trocar de jogo</a>
- <p style="font-size:12px;margin-top:12px">Versão 1.6</p>`);
+ <p style="font-size:12px;margin-top:12px">Versão 1.7</p>`);
  if($('rs'))$('rs').onclick=()=>{paused=false;hide();sound.start()};
  $('on').onclick=()=>{paused=false;onlineMenu()};
  $('so').onclick=()=>{paused=false;soloSetup()};
@@ -470,7 +552,7 @@ function onlineMenu(code=''){
  $('join').onclick=()=>{const v=nm();if(!v)return;const c=$('roomCode').value.trim().toUpperCase();if(c.length!==5){say('O código tem 5 letras/números.');return}sound.start();lockLandscape();askTilt();joinRoom(c)};
  $('bk').onclick=menu;
 }
-const me=()=>({name:prefs.name,color:prefs.color,num:prefs.num});
+const me=()=>({name:prefs.name,color:prefs.color,num:prefs.num,model:prefs.model});
 function netError(m){resetNet();R=null;card(`<h2>Ops!</h2><p>${m}</p><button class="cta" id="ok">Voltar</button>`);$('ok').onclick=()=>onlineMenu()}
 function leave(){unlock();if(net.host)bcast({t:'bye'});resetNet();R=null;sound.stop();history.replaceState(null,'',location.pathname);menu()}
 function connecting(m){card(`<h2>Conectando…</h2><p>${m}</p><button class="cta alt" id="cx">Cancelar</button>`);$('cx').onclick=()=>{resetNet();onlineMenu()}}
@@ -504,8 +586,8 @@ function hostData(c,d){
  const ps=lobby.players;
  if(d.t==='hello'){
   let nm=String(d.name||'Piloto').slice(0,14), i=ps.findIndex(p=>!p.on&&p.name===nm);
-  if(i<0){let b=nm,k=2;while(ps.some(p=>p.name===nm))nm=b+' '+k++;i=ps.length;ps.push({name:nm,color:d.color,num:d.num,pid:c.peer,on:1,d:0,x:0,sp:0,fin:0,time:0})}
-  else Object.assign(ps[i],{on:1,pid:c.peer,color:d.color,num:d.num});
+  if(i<0){let b=nm,k=2;while(ps.some(p=>p.name===nm))nm=b+' '+k++;i=ps.length;ps.push({name:nm,color:d.color,num:d.num,model:d.model,pid:c.peer,on:1,d:0,x:0,sp:0,fin:0,time:0})}
+  else Object.assign(ps[i],{on:1,pid:c.peer,color:d.color,num:d.num,model:d.model});
   net.conns.set(c.peer,{c,i}); c.send({t:'welcome',me:i,code:net.code});
   say(nm+' entrou na sala'); sendLobby();
   if(lobby.started)c.send({t:'go',lobby,late:1});
@@ -563,7 +645,7 @@ function others(){
  posts.forEach((q,i)=>{
   if(i===net.me||!q||q.at==null)return;const p=lobby.players[i];if(!p||!p.on)return;
   const d=q.d+q.sp*Math.min(0.5,(now-q.at)/1000);
-  out.push({z:mod(START+d,L),x:q.x,col:p.color,num:p.num,name:p.name});
+  out.push({z:mod(START+d,L),x:q.x,col:p.color,num:p.num,name:p.name,model:p.model});
  });
  return out;
 }
@@ -597,10 +679,11 @@ function resultsCard(){
  ['pointerup','pointercancel','lostpointercapture'].forEach(ev=>b.addEventListener(ev,()=>on(0)));
  b.addEventListener('contextmenu',e=>e.preventDefault());
 });
-addEventListener('keydown',e=>{keys[e.code]=true;if(e.code==='Escape')menu();if(e.code.startsWith('Arrow')||e.code==='Space')e.preventDefault()});
+addEventListener('keydown',e=>{keys[e.code]=true;if(e.code==='Escape')menu();if(e.code==='KeyT'||e.code==='ShiftLeft')useTurbo();if(e.code.startsWith('Arrow')||e.code==='Space')e.preventDefault()});
 addEventListener('keyup',e=>{keys[e.code]=false});
 $('menuBtn').onclick=menu;
 $('ctrBtn').onclick=centerTilt;
+$('tur').addEventListener('pointerdown',e=>{e.preventDefault();useTurbo()});
 addEventListener('resize',resize);
 document.addEventListener('visibilitychange',()=>{if(document.hidden){sound.stop();if(R&&!R.online&&R.run&&!R.fin)menu()}else if(R&&R.run)wake()});
 
