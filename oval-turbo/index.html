@@ -441,7 +441,7 @@ const roomLink=()=>location.origin+location.pathname+'#sala-'+net.code;
 function loadPeer(){
  if(window.Peer)return Promise.resolve();
  const add=src=>new Promise((ok,ko)=>{const s=document.createElement('script');s.src=src;s.onload=ok;s.onerror=ko;document.head.appendChild(s)});
- return add('https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js').catch(()=>add('https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js'));
+ return (window.mqtt?Promise.resolve():add('../vendor/mqtt.min.js')).then(()=>add('../vendor/mp.js'));
 }
 function resetNet(){try{net.peer&&net.peer.destroy()}catch(e){}Object.assign(net,{on:false,host:false,peer:null,conns:new Map(),hostConn:null,me:-1,code:''});lobby={laps:prefs.laps,players:[],started:false,seed:0};posts=[]}
 function onlineMenu(code=''){
@@ -483,7 +483,7 @@ async function hostRoom(){
  net.host=true; net.code=genCode();
  const peer=new Peer(peerId(net.code)); net.peer=peer;
  peer.on('open',()=>{net.on=true;net.me=0;lobby.players=[{...me(),pid:'host',on:1,d:0,x:0,sp:0,fin:0,time:0}];lobbyCard()});
- peer.on('error',e=>{if(e.type==='unavailable-id'){peer.destroy();hostRoom()}else if(e.type!=='peer-unavailable')netError('Problema na conexão ('+e.type+').')});
+ peer.on('error',e=>{if(e.type==='unavailable-id'){peer.destroy();hostRoom()}else if(e.type!=='peer-unavailable')netError(e.type==='network'?'Não consegui falar com o servidor do jogo. Verifique a internet e tente de novo.':'Problema na conexão ('+e.type+').')});
  peer.on('disconnected',()=>{try{peer.reconnect()}catch(e){}});
  peer.on('connection',c=>{c.on('data',d=>hostData(c,d));c.on('close',()=>hostDrop(c))});
 }
