@@ -88,6 +88,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--yel);outline-of
   <div class="box"><small>TEMPO</small><span id="hTime">0:00,0</span></div>
   <div class="box" id="passBox"><small>PASSOU</small><span id="hPass">0</span></div>
   <button class="box hb" id="ctrBtn" hidden><small>INCLINAÇÃO</small>Centrar</button>
+  <div class="box" id="drBox" hidden style="background:#1f6fe0;margin-left:auto"><small>VÁCUO</small>+1/2s</div>
   <div class="box" id="spd"><small>KM/H</small><span id="hSpd">0</span></div>
  </div>
  <div id="cdown"></div>
@@ -141,7 +142,7 @@ const tz=c=>mod(c.z0+c.s*(R?R.t:0),L);
 
 function newRace(laps,seed,online){
  traffic=makeTraffic(seed);
- R={laps,seed,online,t:0,cd:3.6,run:false,dist:0,speed:0,x:online?[-0.66,0,0.66][Math.max(0,net.me)%3]:0,lapIdx:0,lapStart:0,best:null,passes:0,fin:false,steer:0};
+ R={laps,seed,online,t:0,cd:3.6,run:false,dist:0,speed:0,x:online?[-0.66,0,0.66][Math.max(0,net.me)%3]:0,lapIdx:0,lapStart:0,best:null,passes:0,fin:false,steer:0,top:KMH,draft:false};
  if(online)R.dist=-Math.floor(Math.max(0,net.me)/3)*900;
  tilt.ok=false; document.body.classList.add('racing'); lockLandscape();
  $('posBox').hidden=!online; $('passBox').hidden=!!online; $('ctrBtn').hidden=prefs.steer!=='tilt';
@@ -206,15 +207,27 @@ function update(dt){
  R.x-=dx*sp*seg.curve*CENT*(1-0.35*seg.bank);
  if(R.x>-1&&R.x<1)R.x-=dt*0.35*seg.bank*Math.max(0,0.5-sp);
  bgOff+=seg.curve*sp*dt*0.6;
+ // velocidade máxima variável: sobe na reta (1 km/h a cada 3 s; no vácuo, a cada 2 s)
+ // e cai dentro da curva (1 km/h a cada 2 s), mesmo de pé embaixo
+ const inCurve=Math.abs(seg.curve)>0.5;
+ R.draft=false;
+ if(!inCurve&&R.online&&!R.fin){const Pn=mod(START+R.dist,L);for(const o of others()){const rel=mod(o.z-Pn,L);if(rel>300&&rel<5000&&Math.abs(o.x-R.x)<0.45){R.draft=true;break}}}
+ if(!R.fin){
+  if(inCurve)R.top=Math.max(280,R.top-dt/2);
+  else if(gas)R.top+=dt/(R.draft?2:3);
+ }
+ const cap=MAXS*R.top/KMH;
  if(R.fin)R.speed+=DEC*1.5*dt;
  else if(brk)R.speed+=BRK*dt;
- else if(gas)R.speed+=ACC*dt*(1-0.55*sp);
+ else if(gas){R.speed+=ACC*dt*(1-0.55*Math.min(1,sp));if(R.speed>cap)R.speed=Math.max(cap,R.speed+DEC*0.5*dt)}
  else R.speed+=DEC*dt;
  if(R.x<-1.12&&R.speed>OFF)R.speed=Math.max(OFF,R.speed-MAXS*1.1*dt);
  if(R.x>0.98){R.x=0.9;if(R.speed>MAXS*0.2){R.speed*=0.25;sparks=1;shake=1;beep(120,.25,'square');say('No muro! Tire o pé antes da curva.')}}
  R.x=Math.max(R.x,-1.7);
- R.speed=clamp(R.speed,0,MAXS);
- R.dist+=R.speed*dt;
+ R.speed=Math.max(0,R.speed);
+ // tangência: na curva, a linha de dentro é mais curta (avança mais), a de fora é mais longa
+ const line=inCurve&&R.x>=-1.05?1+0.06*(-clamp(R.x,-1,1))*Math.abs(seg.curve)/4.6:1;
+ R.dist+=R.speed*dt*line;
  // batidas na traseira e ultrapassagens
  const P2=mod(START+R.dist,L);
  for(const c of traffic){
@@ -333,6 +346,7 @@ function hud(dt){
  $('hLap').textContent=Math.min(R.laps,Math.max(1,R.lapIdx+1))+'/'+R.laps;
  $('hTime').textContent=fmtT(R.t);
  $('hPass').textContent=R.passes;
+ $('drBox').hidden=!R.draft;
  if(R.online)$('hPos').textContent=myPos()+'º/'+lobby.players.filter(p=>p.on).length;
  const cd=$('cdown');
  cd.textContent=!R.run&&R.cd>0?(R.cd>3?'':Math.ceil(R.cd)):(R.run&&R.t<0.8?'VAI!':'');
@@ -401,12 +415,12 @@ function bindCar(){
 function menu(){
  if(R&&R.online&&net.on){card(`<h2>PAUSA</h2><p>Corrida online na sala <b>${net.code}</b>. O jogo continua para os outros.</p><button class="cta" id="bk">Voltar à pista</button><button class="cta alt" id="lv">Sair da sala</button>`);$('bk').onclick=hide;$('lv').onclick=leave;return}
  paused=!!R; sound.stop();
- card(`<h1>OVAL TURBO</h1><p>Corrida no oval com curvas inclinadas. Um dedo no acelerador, o outro na direção. Nas curvas 1 e 2 (muro amarelo e preto) é preciso dosar o acelerador para não ir para o muro. Desvie dos carros mais lentos: bater na traseira faz perder velocidade.</p>
+ card(`<h1>OVAL TURBO</h1><p>Corrida no oval com curvas inclinadas. Um dedo no acelerador, o outro na direção. Na reta, de pé embaixo, a velocidade máxima passa de 320 km/h e vai subindo; atrás de outro piloto, o vácuo faz subir mais rápido. Dentro da curva ela cai: faça a tangência pela linha de dentro, que é mais curta. Nas curvas 1 e 2 (muro amarelo e preto) é preciso dosar o acelerador para não ir para o muro. Desvie dos carros mais lentos: bater na traseira faz perder velocidade.</p>
  ${R&&!R.fin&&!R.online?'<button class="cta" id="rs">Continuar corrida</button>':''}
  <button class="cta${R&&!R.fin&&!R.online?' alt':''}" id="on">Online · corrida com a galera</button>
  <button class="cta alt" id="so">Solo · contra o relógio</button>
  <a class="cta alt" href="../" style="text-decoration:none;line-height:48px">← Trocar de jogo</a>
- <p style="font-size:12px;margin-top:12px">Versão 1.3</p>`);
+ <p style="font-size:12px;margin-top:12px">Versão 1.4</p>`);
  if($('rs'))$('rs').onclick=()=>{paused=false;hide();sound.start()};
  $('on').onclick=()=>{paused=false;onlineMenu()};
  $('so').onclick=()=>{paused=false;soloSetup()};

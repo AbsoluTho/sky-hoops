@@ -1,4 +1,4 @@
-const CACHE='skyhoops-v8';
+const CACHE='skyhoops-v9';
 const FILES=['./','index.html','manifest.webmanifest','favicon.svg','icons/icon-192.png','icons/icon-512.png','icons/apple-touch-icon.png',
  'basquete/','basquete/index.html','oval-turbo/','oval-turbo/index.html','oval-turbo/favicon.svg','oval-turbo/icons/icon-512.png','vendor/mqtt.min.js','vendor/mp.js'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES)));self.skipWaiting()});
