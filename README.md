@@ -6,7 +6,8 @@ Do topo de um prédio, acerte a cesta no telhado do outro. Ajuste o **ângulo** 
 
 ## Modos
 
-- **Corrida (vários jogadores):** cada um arremessa uma vez por rodada; acertou, avança de fase. Quem passar primeiro da fase final vence. A rodada sempre vai até o fim, e o desempate é por menos arremessos.
+- **Online (cada um no seu celular):** uma pessoa toca em *Criar sala* e manda o código de 5 letras (ou o link) para a galera; os outros tocam em *Entrar*. Todos veem o mesmo arremesso ao vivo, inclusive a mira de quem está jogando. Conexão direta entre os aparelhos, sem conta e sem servidor próprio. O anfitrião precisa manter o jogo aberto.
+- **Corrida (mesmo aparelho):** cada um arremessa uma vez por rodada; acertou, avança de fase. Quem passar primeiro da fase final vence. A rodada sempre vai até o fim, e o desempate é por menos arremessos.
 - **Solo:** campanha com estrelas (3 estrelas acertando na primeira tentativa).
 - **Treino:** gravidade livre, de 0,1 a 3 G.
 

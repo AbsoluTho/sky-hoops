@@ -75,6 +75,10 @@ input[type=range]{width:100%;accent-color:var(--ball);height:32px}
 .bar b{display:block;height:100%}
 .chip.who{color:#fff}
 [hidden]{display:none!important}
+.code{font:400 44px/1 Bungee,sans-serif;letter-spacing:.12em;color:var(--ink);background:var(--panel);border-radius:16px;padding:14px 8px;margin:8px 0}
+.link{font-size:13px;word-break:break-all;background:#f3fbfe;border-radius:10px;padding:8px;color:var(--ink)!important;user-select:all}
+.codein{flex:1;height:48px;border:2px solid var(--case);border-radius:12px;text-align:center;font:400 22px Bungee,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--ink)}
+.step:disabled,input[type=range]:disabled{opacity:.45}
 button:focus-visible{outline:3px solid var(--lever);outline-offset:2px}
 @media (orientation:landscape) and (max-height:520px){
  #app{flex-direction:row}
@@ -96,6 +100,7 @@ button:focus-visible{outline:3px solid var(--lever);outline-offset:2px}
    <span class="chip" id="hTries">Tentativas 0</span>
    <span class="chip" id="hStars">★ 0</span>
    <button class="chip btn" id="boardBtn" hidden>Placar</button>
+   <span class="chip" id="hRoom" hidden>Sala</span>
    <button class="chip btn" id="guideBtn">Guia</button>
   </div>
   <div id="toast"></div>
@@ -125,8 +130,8 @@ const PLANETS=[
 ];
 const SEQ=[0,0,0,2,1,0,4,3,5,0,2,1,4,5,3];
 let mode='campanha', level=1, lvl, S=10, ox=0, oy=0, cw=0, ch=0;
-let tries=0, guide=false, guideUsed=false, flying=false, ball=null, trail=[], ghost=[], netAnim=0, toastT;
-let save={level:1,stars:{},race:null};
+let tries=0, guide=false, guideUsed=false, playing=null, ballPos=null, trail=[], ghost=[], netAnim=0, toastT;
+let save={level:1,stars:{},race:null,name:''};
 try{save=Object.assign(save,JSON.parse(localStorage.getItem('skyhoops')||'{}'))}catch(e){}
 const store=()=>{try{localStorage.setItem('skyhoops',JSON.stringify(save))}catch(e){}};
 let race=save.race||null, ghosts=[];
@@ -134,24 +139,19 @@ const storeRace=()=>{save.race=race;store()};
 const COLORS=['#ff6a1f','#1f9fd1','#3fae4a','#a64fe0','#e0a800','#ff3f7f','#14a88a','#4b63e8'];
 const colorOf=i=>i<COLORS.length?COLORS[i]:`hsl(${(i*137)%360} 70% 48%)`;
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const isRace=()=>(mode==='corrida'||mode==='online')&&race;
 
 function rng(seed){return()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const seedOf=n=>n*7919+13;
 
-function makeLevel(n,seed){
+function makeLevel(n,seed,gT){
  const r=rng(seed);
- let p;
- if(mode==='treino') p={...PLANETS[0],n:'Treino',g:+$('gR').value};
- else p=PLANETS[n<=SEQ.length?SEQ[n-1]:Math.floor(r()*PLANETS.length)];
+ const p=gT!=null?{...PLANETS[0],n:'Treino',g:gT}:PLANETS[n<=SEQ.length?SEQ[n-1]:Math.floor(r()*PLANETS.length)];
  const k=Math.min(n,14);
- const D=Math.min(48,12+k*1.8+r()*8);
- const hmax=Math.min(32,8+k*2);
- const h1=5+r()*hmax, h2=5+r()*hmax;
- const bw1=6+r()*3, bw2=8+r()*3;
- const x1e=bw1, x2=bw1+D, x2e=x2+bw2;
- const bx=x2e-1.6, rimY=h2+4;
- const L={n,p,g:p.g*G0,D,h1,h2,x1e,x2,x2e,bx,rimY,
-  fx:bx-0.15-2*RIM_R, kx:bx-0.15, hx:bx-0.15-RIM_R,
-  lx:x1e-0.9, ly:h1+2.1, px:x1e-1.7};
+ const D=Math.min(48,12+k*1.8+r()*8), hmax=Math.min(32,8+k*2);
+ const h1=5+r()*hmax, h2=5+r()*hmax, bw1=6+r()*3, bw2=8+r()*3;
+ const x1e=bw1, x2=bw1+D, x2e=x2+bw2, bx=x2e-1.6, rimY=h2+4;
+ const L={n,p,g:p.g*G0,D,h1,h2,x1e,x2,x2e,bx,rimY,fx:bx-0.15-2*RIM_R,kx:bx-0.15,hx:bx-0.15-RIM_R,lx:x1e-0.9,ly:h1+2.1,px:x1e-1.7,_seed:seed};
  L.rects=[[-40,0,x1e,h1],[x2,0,x2e,h2],[bx,rimY-0.4,bx+0.2,rimY+2.4],[bx+0.2,h2,bx+0.5,rimY-0.4]];
  L.pts=[[L.fx,rimY],[L.kx,rimY]];
  L.win=[[],[]];
@@ -159,28 +159,35 @@ function makeLevel(n,seed){
  L.col=[p.bld[Math.floor(r()*p.bld.length)],p.bld[Math.floor(r()*p.bld.length)]];
  L.sky=[];for(let x=-60;x<x2e+60;x+=4+r()*5)L.sky.push([x,3+r()*4,4+r()*24]);
  L.st=[];for(let i=0;i<80;i++)L.st.push([r(),r()*.7,r()]);
- // faixa de força: baseada na menor velocidade que alcança o aro
  const dx=L.hx-L.lx, dy=rimY+0.6-L.ly; let vmin=1e9;
  for(let a=5;a<=80;a+=0.5){const t=a*Math.PI/180,den=2*Math.cos(t)**2*(dx*Math.tan(t)-dy);if(den>0)vmin=Math.min(vmin,Math.sqrt(L.g*dx*dx/den))}
  L.vmin=vmin; L.vmax=Math.ceil(Math.max(vmin*1.7,vmin+8));
  return L;
 }
-
 function startLevel(n,seed){
- level=n; const sd=seed??n*7919+13; lvl=makeLevel(n,sd); lvl._seed=sd;
- tries=0; guideUsed=false; guide=mode!=='treino'&&n<=2; ghost=[]; trail=[]; ball=null; flying=false; netAnim=0;
- const vR=$('vR'); vR.max=lvl.vmax; vR.value=Math.round(lvl.vmin*0.8*10)/10;
- $('aR').value=45; upd(); fit(); hud();
+ level=n; const sd=seed??seedOf(n);
+ lvl=makeLevel(n,sd,mode==='treino'?+$('gR').value:null);
+ tries=0; guideUsed=false; guide=mode!=='treino'&&n<=2; ghost=[]; trail=[]; playing=null; ballPos=null; netAnim=0;
+ $('vR').max=lvl.vmax; $('vR').value=Math.round(lvl.vmin*0.8*10)/10; $('aR').value=45;
+ upd(); fit(); hud();
 }
 function hud(){
- const hl=$('hLevel'), rc=mode==='corrida'&&race;
+ const hl=$('hLevel'), rc=isRace();
  hl.textContent=rc?race.players[race.cur].name+' · Fase '+level+'/'+race.target:mode==='treino'?'Treino':'Fase '+level;
  hl.classList.toggle('who',!!rc); hl.style.background=rc?colorOf(race.cur):'';
  $('hStars').hidden=!!rc; $('boardBtn').hidden=!rc;
  $('hPlanet').textContent=lvl.p.n+' · '+fmt(lvl.p.g,2)+' G';
- $('hTries').textContent='Tentativas '+tries;
+ $('hTries').textContent=mode==='online'&&race?(race.over?'Fim de jogo':race.cur===net.me?'Sua vez!':'Aguarde a sua vez'):'Tentativas '+tries;
+ $('hRoom').hidden=mode!=='online'; $('hRoom').textContent='Sala '+net.code;
  $('hStars').textContent='★ '+Object.values(save.stars).reduce((a,b)=>a+b,0);
  $('guideBtn').classList.toggle('on',guide);
+ setControls();
+}
+function myTurn(){return mode!=='online'||(race&&net.started&&!race.over&&race.cur===net.me)}
+function setControls(){
+ const en=myTurn()&&!playing;
+ document.querySelectorAll('#controls .step,#controls input').forEach(e=>e.disabled=!en);
+ $('fire').disabled=!en; $('fire').textContent=mode==='online'&&!myTurn()?'AGUARDE':'LANÇAR';
 }
 function upd(){
  $('aVal').textContent=fmt(+$('aR').value)+'°';
@@ -188,7 +195,6 @@ function upd(){
  $('gVal').textContent=fmt(+$('gR').value,2)+' G';
 }
 function toast(m,ms=2600){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),ms)}
-
 function resize(){
  const dpr=Math.min(2,devicePixelRatio||1); cw=stage.clientWidth; ch=stage.clientHeight;
  cv.width=cw*dpr; cv.height=ch*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); fit();
@@ -201,15 +207,9 @@ function fit(){
 }
 const X=x=>ox+x*S, Y=y=>oy-y*S;
 
-function fire(){
- if(flying)return;
- const a=+$('aR').value*Math.PI/180, v=+$('vR').value;
- ball={x:lvl.lx,y:lvl.ly,vx:v*Math.cos(a),vy:v*Math.sin(a),t:0,rot:0,maxY:lvl.ly,cross:null,hit:false,scored:false,still:0,end:0};
- if(guide)guideUsed=true;
- tries++; trail=[]; flying=true; $('fire').disabled=true; hud(); beep(300,.08);
-}
-function collide(cx,cy,e){
- const b=ball,dx=b.x-cx,dy=b.y-cy,d2=dx*dx+dy*dy;
+// ===== FÍSICA (passo fixo: o mesmo arremesso dá sempre o mesmo resultado) =====
+function collide(b,cx,cy,e){
+ const dx=b.x-cx,dy=b.y-cy,d2=dx*dx+dy*dy;
  if(d2>=BR*BR)return false;
  let d=Math.sqrt(d2)||1e-6,nx=dx/d,ny=dy/d; if(d2===0){nx=0;ny=1}
  b.x=cx+nx*BR; b.y=cy+ny*BR;
@@ -217,97 +217,151 @@ function collide(cx,cy,e){
  if(vn<0){b.vx-=(1+e)*vn*nx;b.vy-=(1+e)*vn*ny;const tx=-ny,ty=nx,vt=b.vx*tx+b.vy*ty;b.vx-=.15*vt*tx;b.vy-=.15*vt*ty}
  return true;
 }
-function step(dt){
- const b=ball,L=lvl,py=b.y;
- b.vy-=L.g*dt; b.x+=b.vx*dt; b.y+=b.vy*dt; b.t+=dt; b.rot+=b.vx*dt/BR;
- b.maxY=Math.max(b.maxY,b.y);
- let touch=false;
- for(const r of L.rects){const cx=Math.max(r[0],Math.min(b.x,r[2])),cy=Math.max(r[1],Math.min(b.y,r[3]));if(collide(cx,cy,.45)){touch=true;if(r!==L.rects[0]||b.t>.1)b.hit=b.hit||r===L.rects[2]}}
- for(const p of L.pts){const dx=b.x-p[0],dy=b.y-p[1],d=Math.hypot(dx,dy);if(d<BR+RIM_PT){const nx=dx/d,ny=dy/d;ball.x=p[0]+nx*(BR+RIM_PT);ball.y=p[1]+ny*(BR+RIM_PT);const vn=b.vx*nx+b.vy*ny;if(vn<0){b.vx-=1.6*vn*nx;b.vy-=1.6*vn*ny;if(!b.hit)beep(520,.05)}b.hit=true;touch=true}}
- if(b.y<BR){b.y=BR;if(b.vy<0)b.vy*=-.4;b.vx*=.9;touch=true}
- if(!b.scored&&py>L.rimY&&b.y<=L.rimY&&b.vy<0){
-  if(b.x>L.fx+RIM_PT&&b.x<L.kx-RIM_PT){b.scored=true;netAnim=1;beep(880,.12);setTimeout(()=>beep(1175,.15),90)}
-  else if(b.cross===null)b.cross=b.x-L.hx;
+function simulate(L,aDeg,v){
+ const a=aDeg*Math.PI/180, dt=1/240;
+ const b={x:L.lx,y:L.ly,vx:v*Math.cos(a),vy:v*Math.sin(a),t:0,rot:0,maxY:L.ly,cross:null,hit:false,scored:false,still:0,end:0};
+ const f=[], rh=[]; let k=0, sf=-1;
+ for(;;){
+  const py=b.y; let rim=false;
+  b.vy-=L.g*dt; b.x+=b.vx*dt; b.y+=b.vy*dt; b.t+=dt; b.rot+=b.vx*dt/BR;
+  b.maxY=Math.max(b.maxY,b.y);
+  let touch=false;
+  L.rects.forEach((r,j)=>{const cx=Math.max(r[0],Math.min(b.x,r[2])),cy=Math.max(r[1],Math.min(b.y,r[3]));if(collide(b,cx,cy,.45)){touch=true;if(j===2)b.hit=true}});
+  for(const p of L.pts){const dx=b.x-p[0],dy=b.y-p[1],d=Math.hypot(dx,dy);if(d<BR+RIM_PT){const nx=dx/d,ny=dy/d;b.x=p[0]+nx*(BR+RIM_PT);b.y=p[1]+ny*(BR+RIM_PT);const vn=b.vx*nx+b.vy*ny;if(vn<0){b.vx-=1.6*vn*nx;b.vy-=1.6*vn*ny;if(!b.hit)rim=true}b.hit=true;touch=true}}
+  if(b.y<BR){b.y=BR;if(b.vy<0)b.vy*=-.4;b.vx*=.9;touch=true}
+  if(!b.scored&&py>L.rimY&&b.y<=L.rimY&&b.vy<0){
+   if(b.x>L.fx+RIM_PT&&b.x<L.kx-RIM_PT){b.scored=true;sf=f.length}
+   else if(b.cross===null)b.cross=b.x-L.hx;
+  }
+  if(touch&&Math.hypot(b.vx,b.vy)<.6)b.still+=dt;else b.still=0;
+  if(rim)rh.push(f.length);
+  if(k++%4===0)f.push([Math.round(b.x*1000)/1000,Math.round(b.y*1000)/1000,Math.round(b.rot*100)/100]);
+  if(b.scored)b.end+=dt;
+  if(b.x<-25||b.x>L.x2e+25||b.y<-3||b.t>20||b.still>.4||b.end>1.1)break;
  }
- if(touch&&Math.hypot(b.vx,b.vy)<.6)b.still+=dt;else b.still=0;
- const out=b.x<-25||b.x>L.x2e+25||b.y<-3||b.t>20||b.still>.4;
- if(b.scored)b.end+=dt;
- if(out||b.end>1.1)finish();
+ return {f,rh,sf,scored:b.scored,hit:b.hit,maxY:b.maxY,cross:b.cross};
 }
-function finish(){
- flying=false; ghost=trail.slice(); $('fire').disabled=false; const b=ball;
- let m='';
- if(!b.scored){
-  if(b.maxY<lvl.rimY)m='Faltou altura: a bola subiu até '+fmt(b.maxY)+' m e o aro está a '+fmt(lvl.rimY)+' m.';
-  else if(b.cross!==null)m=b.cross<0?'Curta! Caiu '+fmt(-b.cross)+' m antes da cesta.':'Longa! Passou '+fmt(b.cross)+' m além da cesta.';
-  else m=b.hit?'Bateu na tabela/aro e não entrou.':'Errou! Ajuste ângulo e força.';
- }
- if(mode==='corrida')return raceAfter(b.scored,m,b.hit);
- if(b.scored){
-  let st=tries===1?3:tries<=3?2:1; if(guideUsed&&!(mode==='campanha'&&level<=2))st=Math.min(st,2);
-  if(mode==='campanha'){save.stars[level]=Math.max(save.stars[level]||0,st);save.level=Math.max(save.level,level+1);store()}
-  hud(); showWin(st,b.hit);
- } else toast(m,3200);
+function missMsg(res,L){
+ if(res.scored)return '';
+ if(res.maxY<L.rimY)return 'Faltou altura: a bola subiu até '+fmt(res.maxY)+' m e o aro está a '+fmt(L.rimY)+' m.';
+ if(res.cross!==null)return res.cross<0?'Curta! Caiu '+fmt(-res.cross)+' m antes da cesta.':'Longa! Passou '+fmt(res.cross)+' m além da cesta.';
+ return res.hit?'Bateu na tabela/aro e não entrou.':'Errou! Ajuste ângulo e força.';
+}
+function play(res,done){
+ playing={res,t:0,done,sw:0,ri:0}; trail=[]; setControls(); beep(300,.08);
 }
 
-// ===== CORRIDA MULTIJOGADOR =====
+function fire(){
+ if(playing||!myTurn())return;
+ const a=+$('aR').value, v=+$('vR').value;
+ if(guide)guideUsed=true;
+ if(mode==='online'){setControls();$('fire').disabled=true;net.host?hostShot(net.me,a,v):net.hostConn&&net.hostConn.send({t:'shot',a,v});return}
+ tries++; hud();
+ const res=simulate(lvl,a,v);
+ play(res,()=>finish(res,a,v));
+}
+function finish(res,a,v){
+ const m=missMsg(res,lvl);
+ if(mode==='corrida')return raceAfter(res,m,a,v);
+ if(res.scored){
+  let st=tries===1?3:tries<=3?2:1; if(guideUsed&&!(mode==='campanha'&&level<=2))st=Math.min(st,2);
+  if(mode==='campanha'){save.stars[level]=Math.max(save.stars[level]||0,st);save.level=Math.max(save.level,level+1);store()}
+  hud(); showWin(st,res.hit);
+ } else toast(m,3200);
+}
+function showWin(st,hit){
+ card(`<h2>CESTA!</h2><div class="big">${'★'.repeat(st)}${'☆'.repeat(3-st)}</div>
+ <p>${hit?'Entrou depois de tocar no aro.':'Chuá! Direto, sem tocar no aro.'}</p><p>${tries} tentativa${tries>1?'s':''} · ${fmt(+$('aR').value)}° · ${fmt(+$('vR').value)} m/s · ${lvl.p.n}</p>
+ <button class="cta" id="next">${mode==='treino'?'Novo desafio':'Próxima fase'}</button>
+ <button class="cta alt" id="again">Repetir fase</button>`);
+ $('next').onclick=()=>{hide();mode==='treino'?startLevel(5+Math.floor(Math.random()*10),Date.now()):startLevel(level+1)};
+ $('again').onclick=()=>{hide();tries=0;ghost=[];hud()};
+}
+function card(h){$('card').innerHTML=h;$('overlay').classList.remove('hide')}
+function hide(){$('overlay').classList.add('hide')}
+
+// ===== CORRIDA (regras comuns ao modo local e ao online) =====
+function mkP(name,pid){return {name,pid:pid||'',on:1,level:1,tries:0,lt:0,hits:0,fin:0,a:45,v:0,at:0}}
+function advance(R){
+ let nx=R.cur+1;
+ if(nx>=R.players.length){
+  if(R.players.some(q=>q.fin)){R.over=true;return}
+  nx=0; R.round++;
+ }
+ R.cur=nx;
+}
+function applyResult(R,hit,tr,a,v){
+ const i=R.cur,p=R.players[i];
+ p.tries++; p.lt=tr; p.a=a; p.v=v; p.at=p.level;
+ if(hit){p.hits++;p.level++;p.lt=0;p.at=0;if(p.level>R.target&&!p.fin)p.fin=R.round}
+ advance(R);
+ if(mode==='online')for(let g=0;g<R.players.length&&!R.over&&!R.players[R.cur].on;g++)advance(R);
+ return i;
+}
 function boardHTML(){
  const r=race.players.map((p,i)=>({p,i})).sort((a,b)=>(b.p.level-a.p.level)||(a.p.tries-b.p.tries));
- return `<table class="board"><tbody>${r.map(({p,i},k)=>`<tr><td>${k+1}º</td><td><span class="dot" style="background:${colorOf(i)}"></span><b>${esc(p.name)}</b>${i===race.cur&&!race.over?' ◀':''}<div class="bar"><b style="width:${Math.min(p.level-1,race.target)/race.target*100}%;background:${colorOf(i)}"></b></div></td><td class="r">${p.level>race.target?'Chegou!':'Fase '+p.level}<br><small>${p.tries} arremesso${p.tries===1?'':'s'}</small></td></tr>`).join('')}</tbody></table>`;
+ return `<table class="board"><tbody>${r.map(({p,i},k)=>`<tr><td>${k+1}º</td><td><span class="dot" style="background:${colorOf(i)}"></span><b>${esc(p.name)}</b>${mode==='online'&&i===net.me?' (você)':''}${mode==='online'&&!p.on?' <small>· fora</small>':''}${i===race.cur&&!race.over?' ◀':''}<div class="bar"><b style="width:${Math.min(p.level-1,race.target)/race.target*100}%;background:${colorOf(i)}"></b></div></td><td class="r">${p.level>race.target?'Chegou!':'Fase '+p.level}<br><small>${p.tries} arremesso${p.tries===1?'':'s'}</small></td></tr>`).join('')}</tbody></table>`;
+}
+function resultHead(i,hit,msg,touched){
+ const p=race.players[i];
+ if(p.fin&&hit)return `<h2>CHEGOU!</h2><p><b>${esc(p.name)}</b> passou da fase ${race.target}! Quem ainda não jogou nesta rodada tem a última chance de empatar.</p>`;
+ if(hit)return `<h2>CESTA!</h2><p><b>${esc(p.name)}</b> ${touched?'acertou (com aro)':'acertou de chuá'} e avança para a fase ${p.level}.</p>`;
+ return `<h2>Errou!</h2><p><b>${esc(p.name)}</b>: ${msg}<br>Continua na fase ${p.level}.</p>`;
 }
 function newRace(names,target){
- race={target,cur:0,round:1,over:false,players:names.map((n,i)=>({name:n,level:1,tries:0,lt:0,hits:0,fin:0,a:45,v:0,at:0}))};
+ race={target,cur:0,round:1,over:false,players:names.map(n=>mkP(n))};
  ghosts=[]; mode='corrida'; document.body.classList.remove('treino'); storeRace();
+}
+function viewTurn(){
+ const i=race.cur,p=race.players[i];
+ if(!lvl||level!==p.level||lvl._seed!==seedOf(p.level))startLevel(p.level);
+ tries=p.lt; ghost=ghosts[i]||[];
+ if(p.at===p.level&&p.v){$('aR').value=p.a;$('vR').value=p.v;upd()}
+ hud();
 }
 function turn(showCard=true){
  mode='corrida'; document.body.classList.remove('treino');
  const i=race.cur,p=race.players[i];
- startLevel(p.level); tries=p.lt; ghost=ghosts[i]||[];
- if(p.at===p.level&&p.v){$('aR').value=p.a;$('vR').value=p.v;upd()}
- hud();
+ level=-1; viewTurn();
  if(!showCard){hide();return}
  card(`<h2 style="color:${colorOf(i)}">Vez de ${esc(p.name)}</h2><p>Fase ${p.level} de ${race.target} · ${lvl.p.n} (${fmt(lvl.p.g,2)} G) · rodada ${race.round}</p>${boardHTML()}<button class="cta" id="play">Jogar</button><button class="cta alt" id="mn">Menu</button>`);
  $('play').onclick=hide; $('mn').onclick=menu;
 }
-function raceAfter(hit,msg,touched){
- const i=race.cur,p=race.players[i];
- p.tries++; p.lt=tries; p.a=+$('aR').value; p.v=+$('vR').value; p.at=p.level; ghosts[i]=ghost;
- if(hit){p.hits++;p.level++;p.lt=0;p.at=0;ghosts[i]=[];if(p.level>race.target&&!p.fin)p.fin=race.round}
- let nx=i+1;
- if(nx>=race.players.length){
-  if(race.players.some(q=>q.fin)){storeRace();return winner()}
-  nx=0; race.round++;
- }
- race.cur=nx; storeRace(); hud();
+function raceAfter(res,msg,a,v){
+ const i=applyResult(race,res.scored,tries,a,v);
+ ghosts[i]=res.scored?[]:ghost; storeRace();
+ if(race.over)return winner();
  const solo=race.players.length===1;
- if(solo&&!hit){toast(msg,3200);tries=p.lt;hud();return}
- const np=race.players[nx];
- let head;
- if(p.fin&&hit)head=`<h2>CHEGOU!</h2><p><b>${esc(p.name)}</b> passou da fase ${race.target}! Quem ainda não jogou nesta rodada tem a última chance de empatar.</p>`;
- else if(hit)head=`<h2>CESTA!</h2><p><b>${esc(p.name)}</b> ${touched?'acertou (com aro)':'acertou de chuá'} e avança para a fase ${p.level}.</p>`;
- else head=`<h2>Errou!</h2><p><b>${esc(p.name)}</b>: ${msg}<br>Continua na fase ${p.level}.</p>`;
- card(`${head}${boardHTML()}<p style="color:${colorOf(nx)}"><b>Próximo: ${esc(np.name)} · Fase ${np.level}</b></p><button class="cta" id="nt">${solo?'Continuar':'Jogar · '+esc(np.name)}</button>`);
+ if(solo&&!res.scored){toast(msg,3200);tries=race.players[0].lt;hud();return}
+ const nx=race.cur,np=race.players[nx];
+ card(`${resultHead(i,res.scored,msg,res.hit)}${boardHTML()}<p style="color:${colorOf(nx)}"><b>Próximo: ${esc(np.name)} · Fase ${np.level}</b></p><button class="cta" id="nt">${solo?'Continuar':'Jogar · '+esc(np.name)}</button>`);
  $('nt').onclick=()=>turn(false);
 }
 function winner(){
- race.over=true; storeRace();
+ if(mode==='corrida')storeRace();
  const f=race.players.map((p,i)=>({p,i})).filter(o=>o.p.fin).sort((a,b)=>a.p.tries-b.p.tries);
  const w=f[0], tie=f.length>1&&f[1].p.tries===w.p.tries;
  const note=f.length>1?(tie?'Empate total: mesma rodada e mesmo número de arremessos!':'Mais de um chegou na mesma rodada; venceu quem usou menos arremessos.'):'';
+ const on=mode==='online';
  card(`<h1>VITÓRIA!</h1><div class="big" style="color:${colorOf(w.i)}">★ ★ ★</div><h2 style="color:${colorOf(w.i)}">${tie?f.filter(o=>o.p.tries===w.p.tries).map(o=>esc(o.p.name)).join(' e '):esc(w.p.name)}</h2>
  <p>Chegou ao fim da fase ${race.target} em ${w.p.tries} arremessos, na rodada ${w.p.fin}.</p>${note?`<p>${note}</p>`:''}${boardHTML()}
- <button class="cta" id="rm">Revanche</button><button class="cta alt" id="nr">Nova corrida</button><button class="cta alt" id="mn">Menu</button>`);
- $('rm').onclick=()=>{newRace(race.players.map(p=>p.name),race.target);turn()};
- $('nr').onclick=setup; $('mn').onclick=menu;
+ ${!on||net.host?'<button class="cta" id="rm">Revanche</button>':'<p>O anfitrião pode iniciar a revanche.</p><button class="cta" id="ok">OK</button>'}
+ ${on?'<button class="cta alt" id="lv">Sair da sala</button>':'<button class="cta alt" id="nr">Nova corrida</button><button class="cta alt" id="mn">Menu</button>'}`);
+ if($('rm'))$('rm').onclick=()=>{if(on)hostStart();else{newRace(race.players.map(p=>p.name),race.target);turn()}};
+ if($('ok'))$('ok').onclick=hide;
+ if($('lv'))$('lv').onclick=leave;
+ if($('nr'))$('nr').onclick=setup;
+ if($('mn'))$('mn').onclick=menu;
 }
+function stepper(id,val){return `<div class="num"><button class="step" id="${id}M" aria-label="Diminuir">−</button><input id="${id}I" type="number" inputmode="numeric" min="1" value="${val}"><button class="step" id="${id}P" aria-label="Aumentar">+</button></div>`}
 function setup(){
- let names=race?race.players.map(p=>p.name):[], n=Math.max(2,names.length), target=race?race.target:10;
+ let names=race&&mode!=='online'?race.players.map(p=>p.name):[], n=Math.max(2,names.length), target=race?race.target:10;
  const grab=()=>document.querySelectorAll('.names input').forEach(x=>names[+x.dataset.i]=x.value);
  const render=()=>{
-  card(`<h2>CORRIDA</h2><p>Cada um arremessa uma vez por rodada. Acertou, avança de fase; errou, fica. Quem passar primeiro da fase final vence.</p>
-  <div class="field"><b>Jogadores</b><div class="num"><button class="step" id="nM" aria-label="Menos jogadores">−</button><input id="nI" type="number" inputmode="numeric" min="1" value="${n}"><button class="step" id="nP" aria-label="Mais jogadores">+</button></div></div>
+  card(`<h2>CORRIDA</h2><p>Todos no mesmo aparelho, passando de mão em mão. Cada um arremessa uma vez por rodada. Acertou, avança de fase; errou, fica. Quem passar primeiro da fase final vence.</p>
+  <div class="field"><b>Jogadores</b>${stepper('n',n)}</div>
   <div class="names">${Array.from({length:n},(_,i)=>`<div class="nm"><i style="background:${colorOf(i)}"></i><input data-i="${i}" maxlength="16" placeholder="Jogador ${i+1}" value="${esc(names[i]||'')}" aria-label="Nome do jogador ${i+1}"></div>`).join('')}</div>
-  <div class="field"><b>Fase final</b><div class="num"><button class="step" id="tM" aria-label="Menos fases">−</button><input id="tI" type="number" inputmode="numeric" min="1" value="${target}"><button class="step" id="tP" aria-label="Mais fases">+</button></div></div>
+  <div class="field"><b>Fase final</b>${stepper('t',target)}</div>
   <button class="cta" id="go">Começar corrida</button><button class="cta alt" id="bk">Voltar</button>`);
   const setN=v=>{grab();n=Math.max(1,Math.min(200,Math.round(v)||1));render()};
   const setT=v=>{target=Math.max(1,Math.min(99,Math.round(v)||1));$('tI').value=target};
@@ -318,30 +372,182 @@ function setup(){
  };
  render();
 }
-function showWin(st,hit){
- const msg=hit?'Entrou depois de tocar no aro.':'Chuá! Direto, sem tocar no aro.';
- card(`<h2>CESTA!</h2><div class="big">${'★'.repeat(st)}${'☆'.repeat(3-st)}</div>
- <p>${msg}</p><p>${tries} tentativa${tries>1?'s':''} · ${fmt(+$('aR').value)}° · ${fmt(+$('vR').value)} m/s · ${lvl.p.n}</p>
- <button class="cta" id="next">${mode==='treino'?'Novo desafio':'Próxima fase'}</button>
- <button class="cta alt" id="again">Repetir fase</button>`);
- $('next').onclick=()=>{hide();mode==='treino'?startLevel(5+Math.floor(Math.random()*10),Date.now()):startLevel(level+1)};
- $('again').onclick=()=>{hide();const s=lvl;tries=0;ghost=[];hud()};
+
+// ===== ONLINE: cada um no seu aparelho (conexão direta, sem conta) =====
+const net={on:false,host:false,peer:null,conns:new Map(),hostConn:null,me:-1,code:'',started:false,busy:false,pending:null,lastAim:0};
+const CODE_CH='ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+const genCode=()=>Array.from({length:5},()=>CODE_CH[Math.floor(Math.random()*CODE_CH.length)]).join('');
+const peerId=c=>'skyhoops-v1-'+c.toLowerCase();
+const roomLink=()=>location.origin+location.pathname+'#sala-'+net.code;
+function loadPeer(){
+ if(window.Peer)return Promise.resolve();
+ const add=src=>new Promise((ok,ko)=>{const s=document.createElement('script');s.src=src;s.onload=ok;s.onerror=ko;document.head.appendChild(s)});
+ return add('https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js').catch(()=>add('https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js'));
 }
-function card(h){$('card').innerHTML=h;$('overlay').classList.remove('hide')}
-function hide(){$('overlay').classList.add('hide')}
+function resetNet(){
+ try{net.peer&&net.peer.destroy()}catch(e){}
+ Object.assign(net,{on:false,host:false,peer:null,conns:new Map(),hostConn:null,me:-1,code:'',started:false,busy:false,pending:null});
+}
+function onlineMenu(code=''){
+ card(`<h2>ONLINE</h2><p>Cada um joga no próprio celular a mesma partida. Uma pessoa cria a sala e os outros entram com o código.</p>
+ <div class="nm" style="margin:12px 0"><i style="background:var(--ball)"></i><input id="myName" maxlength="16" placeholder="Seu nome" value="${esc(save.name||'')}" aria-label="Seu nome"></div>
+ <button class="cta" id="host">Criar sala</button>
+ <div class="field" style="margin-top:16px"><input id="roomCode" class="codein" maxlength="5" placeholder="CÓDIGO" value="${esc(code)}" aria-label="Código da sala" autocapitalize="characters"><button class="cta alt" id="join" style="margin:0;width:auto;padding:0 18px">Entrar</button></div>
+ <button class="cta alt" id="bk">Voltar</button>`);
+ const nm=()=>{const v=$('myName').value.trim();if(!v){toast('Digite seu nome primeiro.');$('myName').focus();return''}save.name=v;store();return v};
+ $('host').onclick=()=>{const v=nm();if(v)hostRoom(v)};
+ $('join').onclick=()=>{const v=nm();if(!v)return;const c=$('roomCode').value.trim().toUpperCase();if(c.length!==5){toast('O código tem 5 letras/números.');return}joinRoom(v,c)};
+ $('bk').onclick=menu;
+}
+function netError(m){resetNet();mode='campanha';card(`<h2>Ops!</h2><p>${m}</p><button class="cta" id="ok">Voltar</button>`);$('ok').onclick=()=>onlineMenu()}
+function leave(){
+ if(net.host&&net.started&&!race.over)bcast({t:'bye'});
+ resetNet(); mode='campanha'; race=save.race||null; history.replaceState(null,'',location.pathname); menu();
+}
+function lobbyCard(){
+ const ps=race.players;
+ card(`<h2>SALA</h2><div class="code">${net.code}</div>
+ ${net.host?`<p>Mande o código ou o link para a galera:</p><p class="link">${esc(roomLink())}</p><button class="cta alt" id="cp">Copiar link</button>`:'<p>Você entrou! Aguardando o anfitrião começar a partida.</p>'}
+ <table class="board"><tbody>${ps.map((p,i)=>`<tr><td><span class="dot" style="background:${colorOf(i)}"></span><b>${esc(p.name)}</b>${i===net.me?' (você)':''}${i===0?' <small>· anfitrião</small>':''}${!p.on?' <small>· fora</small>':''}</td></tr>`).join('')}</tbody></table>
+ <div class="field"><b>Fase final</b>${net.host?stepper('t',race.target):`<b>${race.target}</b>`}</div>
+ ${net.host?`<button class="cta" id="st">Começar partida (${ps.filter(p=>p.on).length} jogador${ps.filter(p=>p.on).length>1?'es':''})</button>`:''}
+ <button class="cta alt" id="lv">Sair</button>`);
+ $('lv').onclick=leave;
+ if(!net.host)return;
+ $('cp').onclick=()=>{try{navigator.clipboard.writeText(roomLink()).then(()=>toast('Link copiado!'),()=>toast('Copie o link acima.'))}catch(e){toast('Copie o link acima.')}};
+ const setT=v=>{race.target=Math.max(1,Math.min(99,Math.round(v)||1));sendState()};
+ $('tM').onclick=()=>setT(race.target-1); $('tP').onclick=()=>setT(race.target+1); $('tI').onchange=e=>setT(+e.target.value);
+ $('st').onclick=hostStart;
+}
+function connecting(m){card(`<h2>Conectando…</h2><p>${m}</p><button class="cta alt" id="cx">Cancelar</button>`);$('cx').onclick=()=>{resetNet();onlineMenu()}}
+
+// --- anfitrião ---
+async function hostRoom(name){
+ resetNet(); connecting('Criando a sala.');
+ try{await loadPeer()}catch(e){return netError('Não consegui carregar a conexão online. Verifique a internet.')}
+ net.host=true; net.code=genCode();
+ const peer=new Peer(peerId(net.code)); net.peer=peer;
+ peer.on('open',()=>{
+  mode='online'; net.on=true; net.me=0; ghosts=[];
+  race={target:race&&race.target||10,cur:0,round:1,over:false,players:[mkP(name,'host')]};
+  document.body.classList.remove('treino'); lobbyCard();
+ });
+ peer.on('error',e=>{if(e.type==='unavailable-id'){peer.destroy();hostRoom(name)}else if(e.type!=='peer-unavailable')netError('Problema na conexão ('+e.type+').')});
+ peer.on('disconnected',()=>{try{peer.reconnect()}catch(e){}});
+ peer.on('connection',c=>{c.on('data',d=>hostData(c,d));c.on('close',()=>hostDrop(c))});
+}
+function bcast(m){for(const {c} of net.conns.values())if(c.open)try{c.send(m)}catch(e){}}
+function sendState(last){const m={t:'state',race,started:net.started,last:last||null};bcast(m);onState(m)}
+function hostData(c,d){
+ if(d.t==='hello'){
+  let nm=String(d.name||'Jogador').slice(0,16), i=race.players.findIndex(p=>!p.on&&p.name===nm);
+  if(i<0){
+   let base=nm,k=2; while(race.players.some(p=>p.name===nm))nm=base+' '+k++;
+   i=race.players.length; race.players.push(mkP(nm,c.peer));
+  } else {race.players[i].on=1;race.players[i].pid=c.peer}
+  net.conns.set(c.peer,{c,i});
+  c.send({t:'welcome',me:i,code:net.code});
+  toast(nm+' entrou na sala'); sendState();
+ } else if(d.t==='shot'){const e=net.conns.get(c.peer);if(e)hostShot(e.i,+d.a,+d.v)}
+ else if(d.t==='aim'){const e=net.conns.get(c.peer);if(e&&e.i===race.cur){for(const [k,o] of net.conns)if(k!==c.peer&&o.c.open)try{o.c.send(d)}catch(x){}onAim(d)}}
+}
+function hostDrop(c){
+ const e=net.conns.get(c.peer); if(!e)return;
+ net.conns.delete(c.peer); const p=race.players[e.i]; p.on=0;
+ toast(p.name+' saiu da sala');
+ if(net.started&&!race.over&&!net.busy&&race.cur===e.i){for(let g=0;g<race.players.length&&!race.over&&!race.players[race.cur].on;g++)advance(race)}
+ sendState();
+}
+function hostStart(){
+ race.players.forEach(p=>Object.assign(p,{level:1,tries:0,lt:0,hits:0,fin:0,a:45,v:0,at:0}));
+ race.players=race.players.filter((p,i)=>p.on||i===0);
+ let i=0; for(const [k,o] of net.conns){o.i=race.players.findIndex(p=>p.pid===k);try{o.c.send({t:'welcome',me:o.i,code:net.code})}catch(e){}}
+ Object.assign(race,{cur:0,round:1,over:false}); net.started=true; ghosts=[]; net.busy=false;
+ sendState({begin:1});
+}
+function hostShot(i,a,v){
+ if(!net.started||race.over||net.busy||i!==race.cur)return;
+ net.busy=true;
+ const p=race.players[i], L=makeLevel(p.level,seedOf(p.level),null);
+ const res=simulate(L,a,v), msg=missMsg(res,L);
+ const pm={t:'play',i,a,v,res}; bcast(pm); onPlay(pm);
+ applyResult(race,res.scored,p.lt+1,a,v);
+ net.busy=false;
+ sendState({i,hit:res.scored,msg,touched:res.hit,win:race.over});
+}
+
+// --- convidado ---
+async function joinRoom(name,code){
+ resetNet(); connecting('Entrando na sala '+code+'.');
+ try{await loadPeer()}catch(e){return netError('Não consegui carregar a conexão online. Verifique a internet.')}
+ net.code=code;
+ const peer=new Peer(); net.peer=peer;
+ peer.on('open',()=>{
+  const c=peer.connect(peerId(code),{reliable:true,serialization:'json'}); net.hostConn=c;
+  const to=setTimeout(()=>{if(!c.open)netError('Não consegui chegar na sala '+code+'. Confira o código ou peça para o anfitrião manter o jogo aberto.')},12000);
+  c.on('open',()=>{clearTimeout(to);c.send({t:'hello',name})});
+  c.on('data',clientData);
+  c.on('close',()=>{if(net.on)netError('A conexão com a sala caiu. O anfitrião saiu ou a internet oscilou.')});
+ });
+ peer.on('error',e=>{netError(e.type==='peer-unavailable'?'A sala '+code+' não existe. Confira o código.':'Problema na conexão ('+e.type+').')});
+}
+function clientData(d){
+ if(d.t==='welcome'){net.me=d.me;net.on=true;mode='online';document.body.classList.remove('treino')}
+ else if(d.t==='state')onState(d);
+ else if(d.t==='play')onPlay(d);
+ else if(d.t==='aim')onAim(d);
+ else if(d.t==='bye'){net.on=false;netError('O anfitrião encerrou a sala.')}
+}
+
+// --- comum a todos os aparelhos ---
+function onAim(d){if(myTurn()||playing)return;$('aR').value=d.a;$('vR').value=d.v;upd()}
+function sendAim(){
+ if(mode!=='online'||!myTurn())return;
+ const now=Date.now(); if(now-net.lastAim<90)return; net.lastAim=now;
+ const m={t:'aim',a:+$('aR').value,v:+$('vR').value};
+ if(net.host)bcast(m);else if(net.hostConn&&net.hostConn.open)net.hostConn.send(m);
+}
+function onPlay(d){
+ const p=race.players[d.i];
+ if(level!==p.level)startLevel(p.level);
+ ghost=ghosts[d.i]||[];
+ $('aR').value=d.a;$('vR').value=d.v;upd();
+ tries=p.lt+1; hud();
+ play(d.res,()=>{ghosts[d.i]=d.res.scored?[]:ghost;const s=net.pending;net.pending=null;if(s)onState(s);else setControls()});
+}
+function onState(d){
+ if(playing){net.pending=d;return}
+ race=d.race; net.started=d.started;
+ if(net.me>=race.players.length)net.me=race.players.findIndex(p=>p.pid===(net.peer&&net.peer.id));
+ if(!net.started){if(!lvl)startLevel(1);hud();return lobbyCard()}
+ viewTurn();
+ const L=d.last;
+ if(L&&L.begin){ghosts=[];card(`<h2>Começou!</h2><p>Corrida até a fase ${race.target}. Ordem: ${race.players.map(p=>esc(p.name)).join(', ')}.</p>${race.cur===net.me?'<p><b>Você começa!</b></p>':''}<button class="cta" id="ok">${race.cur===net.me?'Jogar':'OK'}</button>`);$('ok').onclick=hide;return}
+ if(L&&L.win)return winner();
+ if(L&&L.i!=null){
+  const mine=race.cur===net.me, np=race.players[race.cur];
+  card(`${resultHead(L.i,L.hit,L.msg,L.touched)}${boardHTML()}${mine?'<p><b>Sua vez!</b></p><button class="cta" id="ok">Jogar</button>':`<p style="color:${colorOf(race.cur)}"><b>Agora é a vez de ${esc(np.name)}.</b></p><button class="cta alt" id="ok">OK</button>`}`);
+  $('ok').onclick=hide;
+  if(mine)beep(660,.1);
+ }
+}
+
 function menu(){
- const live=race&&!race.over;
+ if(mode==='online'&&net.on){card(`<h2>MENU</h2><p>Você está na sala <b>${net.code}</b>.</p><button class="cta" id="bk">Voltar ao jogo</button><button class="cta alt" id="lv">Sair da sala</button>`);$('bk').onclick=hide;$('lv').onclick=leave;return}
+ const live=race&&!race.over&&mode!=='online';
  card(`<h1>SKY HOOPS</h1><p>Do topo de um prédio, acerte a cesta no outro. Escolha o <b>ângulo</b> e a <b>força</b> da catapulta. Cada fase muda a distância, as alturas e a gravidade do planeta.</p>
- ${live?`<button class="cta" id="cr">Continuar corrida · rodada ${race.round}</button>`:''}
- <button class="cta${live?' alt':''}" id="nrc">Corrida · vários jogadores</button>
+ <button class="cta" id="onl">Online · cada um no seu celular</button>
+ ${live?`<button class="cta alt" id="cr">Continuar corrida · rodada ${race.round}</button>`:''}
+ <button class="cta alt" id="nrc">Corrida · mesmo aparelho</button>
  <button class="cta alt" id="camp">${save.level>1?'Solo · continuar fase '+save.level:'Solo · campanha'}</button>
  ${save.level>1?'<button class="cta alt" id="reset">Solo · recomeçar da fase 1</button>':''}
  <button class="cta alt" id="trn">Treino · gravidade livre</button>`);
+ $('onl').onclick=()=>onlineMenu();
  if(live)$('cr').onclick=()=>turn();
- $('nrc').onclick=setup;
+ $('nrc').onclick=()=>{if(mode==='online')race=save.race;setup()};
  $('camp').onclick=()=>{mode='campanha';document.body.classList.remove('treino');hide();startLevel(save.level)};
  $('trn').onclick=()=>{mode='treino';document.body.classList.add('treino');hide();startLevel(6,Date.now())};
- if($('reset'))$('reset').onclick=()=>{save={level:1,stars:{}};store();mode='campanha';document.body.classList.remove('treino');hide();startLevel(1)};
+ if($('reset'))$('reset').onclick=()=>{save.level=1;save.stars={};store();mode='campanha';document.body.classList.remove('treino');hide();startLevel(1)};
 }
 
 let actx;
@@ -361,15 +567,13 @@ function draw(){
  if(p.stars){ctx.fillStyle='#fff';for(const s of L.st){ctx.globalAlpha=.3+s[2]*.6;ctx.fillRect(s[0]*cw,s[1]*ch,1.5,1.5)}ctx.globalAlpha=1}
  ctx.fillStyle='rgba(0,0,0,.14)';for(const b of L.sky)ctx.fillRect(X(b[0]),Y(b[2]),b[1]*S,b[2]*S);
  ctx.fillStyle=p.gr;ctx.fillRect(0,oy,cw,ch-oy);
- // prédios
- [[ -40,L.x1e,L.h1],[L.x2,L.x2e,L.h2]].forEach((b,i)=>{
+ [[-40,L.x1e,L.h1],[L.x2,L.x2e,L.h2]].forEach((b,i)=>{
   const x0=X(Math.max(b[0],-6)),x1=X(b[1]),y=Y(b[2]);
   ctx.fillStyle=L.col[i];ctx.fillRect(x0,y,x1-x0,oy-y);
   ctx.fillStyle='rgba(255,255,255,.12)';ctx.fillRect(x1-Math.max(3,.6*S),y,Math.max(3,.6*S),oy-y);
   ctx.fillStyle='rgba(0,0,0,.25)';ctx.fillRect(x0-2,y-Math.max(3,.4*S),x1-x0+4,Math.max(3,.4*S));
   for(const w of L.win[i]){if(w[0]<-6)continue;ctx.fillStyle=w[2]?'#ffe9a3':'rgba(0,0,0,.25)';ctx.fillRect(X(w[0]),Y(w[1]+1.3),.9*S,1.3*S)}
  });
- // medidas
  ctx.setLineDash([4,4]);ctx.strokeStyle='rgba(255,255,255,.75)';ctx.lineWidth=1.5;
  const my=Math.min(L.h1,L.h2)*0.5;
  ctx.beginPath();ctx.moveTo(X(L.lx),Y(my));ctx.lineTo(X(L.hx),Y(my));ctx.stroke();
@@ -379,7 +583,6 @@ function draw(){
  const lab=(t,x,y)=>{const w=ctx.measureText(t).width+10;ctx.fillStyle='rgba(13,42,54,.8)';ctx.fillRect(x-w/2,y-9,w,18);ctx.fillStyle='#fff';ctx.fillText(t,x,y+4)};
  lab('distância '+fmt(L.hx-L.lx)+' m',X((L.lx+L.hx)/2),Y(my));
  const dh=L.rimY-L.ly; lab((dh>=0?'▲ ':'▼ ')+fmt(Math.abs(dh))+' m',X(L.hx-1.6)-34,Y((L.ly+L.rimY)/2));
- // poste, tabela, aro, rede
  ctx.fillStyle='#8c96a3';ctx.fillRect(X(L.bx+.2),Y(L.rimY-.4),.3*S,(L.rimY-.4-L.h2)*S);
  ctx.fillStyle='#fff';ctx.fillRect(X(L.bx),Y(L.rimY+2.4),Math.max(3,.2*S),2.8*S);
  ctx.strokeStyle='#e33';ctx.lineWidth=Math.max(1,.08*S);ctx.strokeRect(X(L.bx),Y(L.rimY+1.2),Math.max(3,.2*S),1*S);
@@ -388,60 +591,66 @@ function draw(){
  for(let i=0;i<=4;i++){const t=i/4,xa=L.fx+t*(L.kx-L.fx),xb=L.fx+.35+t*(L.kx-L.fx-.7)+sw;ctx.beginPath();ctx.moveTo(X(xa),Y(L.rimY));ctx.lineTo(X(xb),Y(L.rimY-nl));ctx.stroke()}
  for(let j=1;j<=2;j++){const f=j/3;ctx.beginPath();ctx.moveTo(X(L.fx+.35*f+sw*f),Y(L.rimY-nl*f));ctx.lineTo(X(L.kx-.35*f+sw*f),Y(L.rimY-nl*f));ctx.stroke()}
  ctx.strokeStyle='#ff5a14';ctx.lineWidth=Math.max(3,.18*S);ctx.beginPath();ctx.moveTo(X(L.fx),Y(L.rimY));ctx.lineTo(X(L.kx),Y(L.rimY));ctx.stroke();
- // fantasma e rastro
  const path=(pts,col,w,dash)=>{if(pts.length<2)return;ctx.strokeStyle=col;ctx.lineWidth=w;ctx.setLineDash(dash||[]);ctx.beginPath();pts.forEach((q,i)=>i?ctx.lineTo(X(q[0]),Y(q[1])):ctx.moveTo(X(q[0]),Y(q[1])));ctx.stroke();ctx.setLineDash([])};
  path(ghost,'rgba(255,255,255,.35)',2,[3,5]);
  path(trail,'rgba(255,210,58,.9)',2.5);
- if(!flying&&guide)path(predict(.35),'rgba(255,255,255,.95)',3,[2,6]);
- // arremessador
+ if(!playing&&guide)path(predict(.35),'rgba(255,255,255,.95)',3,[2,6]);
  const a=+$('aR').value*Math.PI/180,k=S,fx=X(L.px),fy=Y(L.h1);
  ctx.strokeStyle='#14303c';ctx.lineWidth=Math.max(2,.22*k);ctx.lineCap='round';
  ctx.beginPath();ctx.moveTo(fx-.3*k,fy);ctx.lineTo(fx,fy-.9*k);ctx.lineTo(fx+.3*k,fy);ctx.stroke();
- ctx.strokeStyle=mode==='corrida'&&race?colorOf(race.cur):'#ffd23a';ctx.lineWidth=Math.max(3,.45*k);ctx.beginPath();ctx.moveTo(fx,fy-.9*k);ctx.lineTo(fx,fy-1.7*k);ctx.stroke();
+ ctx.strokeStyle=isRace()?colorOf(race.cur):'#ffd23a';ctx.lineWidth=Math.max(3,.45*k);ctx.beginPath();ctx.moveTo(fx,fy-.9*k);ctx.lineTo(fx,fy-1.7*k);ctx.stroke();
  ctx.strokeStyle='#14303c';ctx.lineWidth=Math.max(2,.2*k);ctx.beginPath();ctx.moveTo(fx,fy-1.6*k);ctx.lineTo(X(L.lx),Y(L.ly));ctx.stroke();
  ctx.fillStyle='#c98a5e';ctx.beginPath();ctx.arc(fx,fy-2.05*k,Math.max(3,.3*k),0,7);ctx.fill();
- // seta de mira
- if(!flying){const v=+$('vR').value,len=(1.5+5*v/L.vmax)*S,sx=X(L.lx),sy=Y(L.ly),ex=sx+Math.cos(a)*len,ey=sy-Math.sin(a)*len;
+ if(!playing){const v=+$('vR').value,len=(1.5+5*v/L.vmax)*S,sx=X(L.lx),sy=Y(L.ly),ex=sx+Math.cos(a)*len,ey=sy-Math.sin(a)*len;
   ctx.strokeStyle='#ffd23a';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(sx,sy);ctx.lineTo(ex,ey);ctx.stroke();
   ctx.fillStyle='#ffd23a';ctx.beginPath();ctx.moveTo(ex+Math.cos(a)*8,ey-Math.sin(a)*8);ctx.lineTo(ex+Math.sin(a)*6,ey+Math.cos(a)*6);ctx.lineTo(ex-Math.sin(a)*6,ey-Math.cos(a)*6);ctx.fill()}
- // bola
- const bx=ball&&(flying||ball.scored)?ball.x:L.lx, by=ball&&(flying||ball.scored)?ball.y:L.ly, rot=ball?ball.rot:0, rp=Math.max(5,BR*S);
- if(Y(by)<-rp){ctx.fillStyle='#ff6a1f';ctx.beginPath();ctx.moveTo(X(bx),6);ctx.lineTo(X(bx)-7,18);ctx.lineTo(X(bx)+7,18);ctx.fill();ctx.fillStyle='#fff';ctx.fillText(fmt(by,0)+' m',X(bx),32)}
- else{ctx.save();ctx.translate(X(bx),Y(by));ctx.rotate(-rot);ctx.fillStyle='#ff6a1f';ctx.beginPath();ctx.arc(0,0,rp,0,7);ctx.fill();
+ const bp=playing&&ballPos?ballPos:[L.lx,L.ly,0], rp=Math.max(5,BR*S);
+ if(Y(bp[1])<-rp){ctx.fillStyle='#ff6a1f';ctx.beginPath();ctx.moveTo(X(bp[0]),6);ctx.lineTo(X(bp[0])-7,18);ctx.lineTo(X(bp[0])+7,18);ctx.fill();ctx.fillStyle='#fff';ctx.fillText(fmt(bp[1],0)+' m',X(bp[0]),32)}
+ else{ctx.save();ctx.translate(X(bp[0]),Y(bp[1]));ctx.rotate(-bp[2]);ctx.fillStyle='#ff6a1f';ctx.beginPath();ctx.arc(0,0,rp,0,7);ctx.fill();
   ctx.strokeStyle='#7a2a00';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(-rp,0);ctx.lineTo(rp,0);ctx.moveTo(0,-rp);ctx.lineTo(0,rp);ctx.stroke();ctx.restore()}
 }
 
 let last=0;
-function loop(t){
- const dt=Math.min(.05,(t-last)/1000||0);last=t;
- if(flying&&ball){
-  const ts=Math.max(1,1/Math.sqrt(lvl.p.g));
-  const n=Math.ceil(dt*ts*240);for(let i=0;i<n&&flying;i++)step(dt*ts/n);
-  if(trail.length===0||Math.hypot(ball.x-trail[trail.length-1][0],ball.y-trail[trail.length-1][1])>.3)trail.push([ball.x,ball.y]);
+function tick(dt){
+ if(playing){
+  const P=playing,f=P.res.f;
+  P.t+=dt*Math.max(1,1/Math.sqrt(lvl.p.g))*60;
+  const i=Math.min(f.length-1,Math.floor(P.t));
+  ballPos=f[i];
+  if(!trail.length||Math.hypot(ballPos[0]-trail[trail.length-1][0],ballPos[1]-trail[trail.length-1][1])>.3)trail.push([ballPos[0],ballPos[1]]);
+  while(P.ri<P.res.rh.length&&P.res.rh[P.ri]<=i){beep(520,.05);P.ri++}
+  if(!P.sw&&P.res.sf>=0&&i>=P.res.sf){P.sw=1;netAnim=1;beep(880,.12);setTimeout(()=>beep(1175,.15),90)}
+  if(P.t>=f.length-1){ghost=trail.slice();playing=null;setControls();P.done()}
  }
  if(netAnim>0)netAnim=Math.max(0,netAnim-dt*1.2);
+}
+function loop(t){
+ const dt=Math.min(.05,(t-last)/1000||0);last=t;
+ tick(dt);
  if(lvl)draw();
  requestAnimationFrame(loop);
 }
+// se a aba ficar em segundo plano, termina a animação para o jogo não travar
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&playing)tick(1e4)});
 
-// controles
-$('aR').oninput=$('vR').oninput=upd;
-$('gR').oninput=()=>{upd();if(mode==='treino'&&!flying){lvl.p.g=+$('gR').value;const keepA=$('aR').value;const s=lvl;lvl=makeLevel(level,s._seed);lvl._seed=s._seed;$('vR').max=lvl.vmax;$('aR').value=keepA;fit();hud()}};
+$('aR').oninput=$('vR').oninput=()=>{upd();sendAim()};
+$('gR').oninput=()=>{upd();if(mode==='treino'&&!playing){const keepA=$('aR').value;lvl=makeLevel(level,lvl._seed,+$('gR').value);$('vR').max=lvl.vmax;$('aR').value=keepA;fit();hud()}};
 let hold;
 document.querySelectorAll('.step').forEach(b=>{
- const go=()=>{const r=$(b.dataset.t+'R'),st=b.dataset.t==='g'?.05:b.dataset.t==='a'?.5:.1;r.value=(+r.value+st*b.dataset.d).toFixed(2);r.dispatchEvent(new Event('input'))};
+ const go=()=>{if(b.disabled)return;const r=$(b.dataset.t+'R'),st=b.dataset.t==='g'?.05:b.dataset.t==='a'?.5:.1;r.value=(+r.value+st*b.dataset.d).toFixed(2);r.dispatchEvent(new Event('input'))};
  b.addEventListener('pointerdown',e=>{e.preventDefault();go();hold=setTimeout(function rep(){go();hold=setTimeout(rep,60)},350)});
  ['pointerup','pointerleave','pointercancel'].forEach(ev=>b.addEventListener(ev,()=>clearTimeout(hold)));
 });
 $('fire').onclick=fire;
-$('guideBtn').onclick=()=>{guide=!guide;hud();if(guide&&!(mode==='campanha'&&level<=2))toast('Guia ligado: a fase vale no máximo 2 estrelas.')};
+$('guideBtn').onclick=()=>{guide=!guide;hud();if(guide&&mode!=='online'&&!(mode!=='treino'&&level<=2))toast('Guia ligado: a fase vale no máximo 2 estrelas.')};
 $('menuBtn').onclick=menu;
-$('boardBtn').onclick=()=>{if(!race||flying)return;card(`<h2>PLACAR</h2><p>Corrida até a fase ${race.target} · rodada ${race.round}</p>${boardHTML()}<button class="cta" id="cl">Fechar</button>`);$('cl').onclick=hide};
+$('boardBtn').onclick=()=>{if(!race||playing)return;card(`<h2>PLACAR</h2><p>Corrida até a fase ${race.target} · rodada ${race.round}</p>${boardHTML()}<button class="cta" id="cl">Fechar</button>`);$('cl').onclick=hide};
 new ResizeObserver(resize).observe(stage);
 
 startLevel(save.level);
 resize();
-menu();
+const hm=/^#sala-([A-Z0-9]{5})$/i.exec(location.hash);
+hm?onlineMenu(hm[1].toUpperCase()):menu();
 requestAnimationFrame(loop);
 if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('sw.js').catch(()=>{});
 }
