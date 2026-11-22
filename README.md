@@ -5,6 +5,7 @@
 A página inicial deixa escolher o jogo:
 
 - **Sky Hoops** (`basquete/`) — basquete galáctico
+- **Pedrada** (`pedrada/`) — duelo entre telhados: de 2 a 4 jogadores, cada um num prédio, acertando os outros com pedras; o último em pé vence; mesmo aparelho ou online
 - **Oval Turbo** (`oval-turbo/`) — corrida no oval com curvas inclinadas, estilo Enduro; acelerador + botões ou inclinação do aparelho, travado na horizontal; solo ou online
 
 ## Sky Hoops — Basquete Balístico
@@ -32,5 +33,6 @@ Depois de instalado, o jogo abre em tela cheia e funciona sem internet.
 - `index.html` — tela de escolha do jogo
 - `basquete/index.html` — Sky Hoops
 - `oval-turbo/index.html` — Oval Turbo
+- `pedrada/index.html` — Pedrada
 - `manifest.webmanifest` e `sw.js` — instalação como app e funcionamento offline
 - `icons/` — ícone e logo

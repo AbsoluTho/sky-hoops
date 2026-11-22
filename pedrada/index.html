@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Pedrada</title>
+<meta name="description" content="Do alto dos prédios, acerte os outros jogadores com pedras. O último em pé vence.">
+<meta name="theme-color" content="#3b2a4a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Pedrada">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Nunito:wght@600;800&display=swap" rel="stylesheet">
+<style>
+/* VOICE: duelo de fliperama no fim de tarde, divertido e direto
+   IDEA: a brincadeira de arremesso entre telhados, com pedras e gravidade de outros planetas
+   PICTURE: a cidade inteira na tela, com os jogadores em cima dos prédios e o arco da pedra
+   COLOUR and TYPE: roxo do entardecer, terracota dos prédios, amarelo de destaque; Bungee + Nunito
+   LAYOUT: cena em cima, painel de arremesso embaixo (lateral na horizontal) */
+:root{--sky:#3b2a4a;--case:#8a5a44;--case2:#5e3b2c;--rock:#8d8f96;--acc:#ffcc33;--ink:#2a1c22;--panel:#f6ece4;--mut:#7a6157}
+*{box-sizing:border-box;min-width:0;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--case2);color:var(--ink);font:600 15px/1.3 Nunito,system-ui,sans-serif;overflow:hidden;touch-action:manipulation}
+#app{display:flex;flex-direction:column;height:100%;height:100dvh;padding:env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left)}
+#stage{position:relative;flex:1;min-height:0;margin:8px 8px 0;border-radius:18px;overflow:hidden;border:4px solid var(--case)}
+canvas{display:block;width:100%;height:100%}
+#hud{position:absolute;top:8px;left:8px;right:8px;display:flex;gap:6px;flex-wrap:wrap;pointer-events:none}
+.chip{background:rgba(255,255,255,.9);border-radius:999px;padding:5px 10px;font-size:13px;font-weight:800;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.2)}
+.chip.btn{pointer-events:auto;border:0;font:inherit;font-size:13px;font-weight:800;color:var(--ink);cursor:pointer}
+.chip.who{color:#fff}
+#toast{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);background:rgba(42,28,34,.92);color:#fff;padding:8px 14px;border-radius:12px;font-size:14px;max-width:92%;text-align:center;opacity:0;transition:opacity .25s;pointer-events:none}
+#toast.show{opacity:1}
+#controls{background:var(--case);padding:10px 12px calc(10px + env(safe-area-inset-bottom));display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 12px;align-items:center}
+.ctl{display:grid;grid-template-columns:70px 44px minmax(0,1fr) 44px;gap:6px;align-items:center;background:var(--panel);border-radius:14px;padding:4px 6px}
+.ctl label{font-size:11px;color:var(--mut);line-height:1.1}
+.ctl label span{display:block;color:var(--ink);font-size:17px;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+.step{height:44px;border-radius:12px;border:0;background:#fff;color:var(--ink);font-size:20px;font-weight:800;box-shadow:0 2px 0 rgba(0,0,0,.15);cursor:pointer}
+.step:disabled,input[type=range]:disabled,.dirb:disabled{opacity:.45}
+input[type=range]{width:100%;accent-color:var(--case2);height:32px}
+.dirrow{display:grid;grid-template-columns:70px minmax(0,1fr) minmax(0,1fr);gap:6px;align-items:center;background:var(--panel);border-radius:14px;padding:4px 6px}
+.dirrow label{font-size:11px;color:var(--mut)}
+.dirb{height:40px;border-radius:12px;border:2px solid var(--ink);background:#fff;font:800 14px Nunito,sans-serif;color:var(--ink);cursor:pointer}
+.dirb.sel{background:var(--ink);color:#fff}
+#fire{grid-column:2;grid-row:1/-1;width:96px;height:96px;border-radius:50%;border:5px solid var(--acc);background:radial-gradient(circle at 35% 30%,#c4c6cc,#8d8f96 55%,#55575d);color:#fff;font:400 15px Bungee,sans-serif;box-shadow:0 6px 0 #a88300;cursor:pointer;text-shadow:0 1px 2px #000}
+#fire:active{transform:translateY(3px);box-shadow:0 3px 0 #a88300}
+#fire:disabled{filter:grayscale(.7) brightness(.8)}
+#overlay{position:fixed;inset:0;background:rgba(30,18,26,.6);display:flex;align-items:center;justify-content:center;padding:18px;z-index:5}
+#overlay.hide{display:none}
+.card{background:#fff;border-radius:22px;padding:20px;max-width:400px;width:100%;max-height:92dvh;overflow:auto;text-align:center;border:5px solid var(--case);box-shadow:0 10px 30px rgba(0,0,0,.35)}
+.card h1{font:400 38px/1.05 Bungee,sans-serif;margin:0 0 6px;color:var(--case)}
+.card h2{font:400 26px/1.1 Bungee,sans-serif;margin:0 0 8px}
+.card p{margin:8px 0;color:var(--mut)}
+.cta{display:block;width:100%;margin-top:10px;min-height:48px;border:0;border-radius:14px;font:400 16px Bungee,sans-serif;cursor:pointer;background:var(--case);color:#fff;box-shadow:0 4px 0 var(--case2);text-decoration:none;line-height:48px}
+.cta.alt{background:var(--ink);box-shadow:0 4px 0 #000}
+.field{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:12px 0;text-align:left}
+.num{display:flex;align-items:center;gap:6px}
+.num .step{width:44px}
+.num input{width:60px;height:44px;text-align:center;font:800 18px Nunito,sans-serif;border:2px solid var(--case);border-radius:12px;color:var(--ink)}
+.names{display:grid;gap:8px;margin:10px 0}
+.nm{position:relative}
+.nm i{position:absolute;left:12px;top:50%;width:16px;height:16px;border-radius:50%;transform:translateY(-50%)}
+.nm input{width:100%;height:44px;border:2px solid #ead9cc;border-radius:12px;padding:0 12px 0 38px;font:700 16px Nunito,sans-serif;color:var(--ink)}
+.seg{display:flex;flex-wrap:wrap;border-radius:12px;overflow:hidden;border:2px solid var(--ink)}
+.seg button{border:0;background:#fff;padding:0 10px;height:38px;font:800 13px Nunito,sans-serif;color:var(--ink);cursor:pointer;flex:1}
+.seg button.sel{background:var(--ink);color:#fff}
+.code{font:400 44px/1 Bungee,sans-serif;letter-spacing:.12em;background:var(--panel);border-radius:16px;padding:14px 8px;margin:8px 0}
+.link{font-size:13px;word-break:break-all;background:#fbf6f2;border-radius:10px;padding:8px;color:var(--ink)!important}
+.codein{flex:1;height:48px;border:2px solid var(--ink);border-radius:12px;text-align:center;font:400 22px Bungee,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--ink)}
+table{width:100%;border-collapse:collapse;margin:10px 0;text-align:left;font-size:14px}
+td{padding:7px 4px;border-bottom:1px solid #f0e4da}
+td.r{text-align:right;white-space:nowrap}
+small{color:var(--mut)}
+.dot{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:6px;vertical-align:-1px}
+[hidden]{display:none!important}
+button:focus-visible,input:focus-visible,a:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+@media (orientation:landscape) and (max-height:520px){
+ #app{flex-direction:row}
+ #stage{margin:8px 0 8px 8px}
+ #controls{width:320px;grid-template-columns:minmax(0,1fr);align-content:center;padding:8px 10px}
+ #fire{grid-column:1;grid-row:auto;justify-self:center;width:80px;height:80px}
+}
+@media (prefers-reduced-motion:reduce){#toast{transition:none}}
+</style>
+</head>
+<body>
+<div id="app">
+ <div id="stage">
+  <canvas id="cv"></canvas>
+  <div id="hud">
+   <button class="chip btn" id="menuBtn" aria-label="Menu">☰</button>
+   <span class="chip" id="hWho">—</span>
+   <span class="chip" id="hPlanet">Terra</span>
+   <span class="chip" id="hAlive">4 em pé</span>
+   <span class="chip" id="hRoom" hidden>Sala</span>
+  </div>
+  <div id="toast"></div>
+ </div>
+ <div id="controls">
+  <div class="dirrow"><label>Direção</label><button class="dirb" id="dL">◀ Esquerda</button><button class="dirb sel" id="dR">Direita ▶</button></div>
+  <div class="ctl"><label>Ângulo<span id="aVal">45°</span></label><button class="step" data-t="a" data-d="-1">−</button><input type="range" id="aR" min="0" max="85" step="0.5" value="45"><button class="step" data-t="a" data-d="1">+</button></div>
+  <div class="ctl"><label>Força<span id="vVal">10 m/s</span></label><button class="step" data-t="v" data-d="-1">−</button><input type="range" id="vR" min="1" max="40" step="0.1" value="15"><button class="step" data-t="v" data-d="1">+</button></div>
+  <button id="fire">LANÇAR</button>
+ </div>
+</div>
+<div id="overlay" class="hide"><div class="card" id="card"></div></div>
+
+<script>
+{
+const $=id=>document.getElementById(id);
+const cv=$('cv'),ctx=cv.getContext('2d'),stage=$('stage');
+const fmt=(n,d=1)=>n.toFixed(d).replace('.',',');
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const mod=(a,m)=>((a%m)+m)%m, clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const G0=9.81, RR=0.4, PW=1.3, PH=3.0;
+const PLANETS=[
+ {n:'Terra',g:1,sky:['#4a3a6a','#f2a26b'],gr:'#4b6b3a'},
+ {n:'Lua',g:0.165,sky:['#03040c','#1b2246'],gr:'#8f8f97',stars:1},
+ {n:'Marte',g:0.38,sky:['#7a2e1a','#f1b48a'],gr:'#9b3d1c'},
+ {n:'Júpiter',g:2.53,sky:['#5a3520','#e3b78c'],gr:'#5b3820'},
+ {n:'Planeta X',g:2,sky:['#2a0b4a','#b052cf'],gr:'#2a1446',stars:1}
+];
+const COLORS=['#ff5a3c','#2f8fe0','#3fae4a','#e0b400'];
+const BCOLS=['#7d5a4a','#8f6a4f','#6b5d73','#5d6b7a','#9a7b5c','#6f4f45'];
+function rng(seed){return()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+
+// ===== CIDADE =====
+function makeMap(seed,n){
+ const r=rng(seed), extra=n+Math.floor(r()*2), B=n+extra, bs=[];
+ let x=4;
+ for(let i=0;i<B;i++){const w=4+r()*2.5;bs.push({x0:x,x1:x+w,h:7+r()*20,col:BCOLS[Math.floor(r()*BCOLS.length)]});x+=w+2+r()*4}
+ const W=x+2;
+ const pb=[];for(let k=0;k<n;k++)pb.push(Math.round(k*(B-1)/Math.max(1,n-1)));
+ // prédios intermediários um pouco mais altos viram obstáculo
+ bs.forEach((b,i)=>{if(!pb.includes(i))b.h=Math.min(32,b.h+4+r()*5)});
+ bs.forEach(b=>{b.win=[];for(let y=1.5;y<b.h-1;y+=2.4)for(let xx=b.x0+0.9;xx<b.x1-0.9;xx+=1.6)b.win.push([xx,y,r()<.45])});
+ const spots=pb.map(i=>{const b=bs[i];return {bi:i,x:(b.x0+b.x1)/2,y:b.h}});
+ const H=Math.max(...bs.map(b=>b.h))+8;
+ const stars=Array.from({length:70},()=>[r(),r()*0.6,r()]);
+ return {bs,spots,W,H,stars,seed};
+}
+let M=makeMap(1,4);
+
+// ===== ESTADO =====
+let mode='menu', G=null, planet=PLANETS[0], dir=1, playing=null, ballPos=null, trail=[], ghosts=[], fx=[], toastT;
+let S=10, ox=0, oy=0, cw=0, ch=0;
+let save={name:'',planet:'rand',names:[]};
+try{save=Object.assign(save,JSON.parse(localStorage.getItem('pedrada')||'{}'))}catch(e){}
+const store=()=>{try{localStorage.setItem('pedrada',JSON.stringify(save))}catch(e){}};
+const colorOf=i=>COLORS[i%COLORS.length];
+const vmaxOf=()=>{const g=planet.g*G0;let d=0;M.spots.forEach(a=>M.spots.forEach(b=>d=Math.max(d,Math.abs(a.x-b.x))));return Math.ceil(Math.sqrt(g*d)*1.7+6)};
+function newGame(names,seed,pl){
+ M=makeMap(seed,names.length); planet=PLANETS[pl];
+ G={seed,pl,cur:0,round:1,over:false,order:[],players:names.map((n,i)=>({name:n,pid:'',on:1,alive:true,a:45,v:0,dir:i<names.length/2?1:-1,shots:0}))};
+ ghosts=[]; fx=[];
+}
+function myIdx(){return mode==='online'?net.me:G?G.cur:0}
+function myTurn(){if(!G||G.over)return false;if(mode==='online')return net.started&&G.cur===net.me;return true}
+
+// ===== FÍSICA (passo fixo) =====
+function simulate(i,aDeg,v,d){
+ const p=G.players[i], s=M.spots[i], g=planet.g*G0, a=aDeg*Math.PI/180, dt=1/240;
+ const b={x:s.x+d*0.55,y:s.y+PH*0.67,vx:d*v*Math.cos(a),vy:v*Math.sin(a),t:0,rot:0};
+ const f=[]; let k=0, hit=-1, imp=null;
+ for(;;){
+  b.vy-=g*dt; b.x+=b.vx*dt; b.y+=b.vy*dt; b.t+=dt; b.rot+=b.vx*dt/RR;
+  if(k++%4===0)f.push([Math.round(b.x*1000)/1000,Math.round(b.y*1000)/1000,Math.round(b.rot*100)/100]);
+  // acertou alguém?
+  for(let j=0;j<G.players.length;j++){
+   const q=G.players[j]; if(!q.alive||(j===i&&b.t<0.25))continue;
+   const sp=M.spots[j];
+   if(b.x>sp.x-PW/2-RR&&b.x<sp.x+PW/2+RR&&b.y>sp.y-RR&&b.y<sp.y+PH+RR){hit=j;break}
+  }
+  if(hit>=0){imp=[b.x,b.y];break}
+  let stop=false;
+  for(const bd of M.bs)if(b.x>bd.x0-RR&&b.x<bd.x1+RR&&b.y<bd.h+RR){stop=true;break}
+  if(stop||b.y<RR){imp=[b.x,Math.max(b.y,RR)];break}
+  if(b.x<-25||b.x>M.W+25||b.t>25){imp=null;break}
+ }
+ f.push([b.x,b.y,b.rot]);
+ return {f,hit,imp};
+}
+function play(res,done){playing={res,t:0,done};trail=[];setControls();beep(260,.08)}
+function applyShot(i,res,a,v,d){
+ const p=G.players[i]; p.shots++; p.a=a; p.v=v; p.dir=d;
+ if(res.hit>=0){const q=G.players[res.hit];q.alive=false;G.order.push(res.hit);q.by=i}
+ advance();
+}
+function advance(){
+ const alive=G.players.filter(p=>p.alive&&p.on);
+ if(alive.length<=1){G.over=true;G.winner=alive.length?G.players.indexOf(alive[0]):-1;return}
+ let n=G.cur;
+ for(let k=0;k<G.players.length;k++){n=(n+1)%G.players.length;if(n===0)G.round++;const q=G.players[n];if(q.alive&&q.on)break}
+ G.cur=n;
+}
+function shotText(i,res){
+ const p=G.players[i];
+ if(res.hit<0)return `<b>${esc(p.name)}</b> errou.`;
+ if(res.hit===i)return `<b>${esc(p.name)}</b> acertou a si mesmo! Está fora.`;
+ return `<b>${esc(p.name)}</b> acertou <b>${esc(G.players[res.hit].name)}</b>! ${esc(G.players[res.hit].name)} está fora.`;
+}
+
+// ===== CONTROLES =====
+function setDir(d){dir=d;$('dL').classList.toggle('sel',d<0);$('dR').classList.toggle('sel',d>0)}
+function upd(){
+ const hid=mode==='online'&&!myTurn();
+ $('aVal').textContent=hid?'—':fmt(+$('aR').value)+'°';
+ $('vVal').textContent=hid?'—':fmt(+$('vR').value)+' m/s';
+}
+function setControls(){
+ const en=myTurn()&&!playing;
+ document.querySelectorAll('#controls .step,#controls input,.dirb').forEach(e=>e.disabled=!en);
+ $('fire').disabled=!en; $('fire').textContent=mode==='online'&&!myTurn()?'AGUARDE':'LANÇAR';
+ upd();
+}
+function hud(){
+ const p=G&&G.players[G.cur], who=$('hWho');
+ who.textContent=mode==='menu'?'Pedrada':G?(G.over?'Fim de jogo':(mode==='online'&&G.cur===net.me?'Sua vez!':'Vez de '+p.name)):'—';
+ who.classList.toggle('who',!!(G&&!G.over)); who.style.background=G&&!G.over?colorOf(G.cur):'';
+ $('hPlanet').textContent=planet.n+' · '+fmt(planet.g,2)+' G';
+ $('hAlive').textContent=G?G.players.filter(p=>p.alive&&p.on).length+' em pé':'';
+ $('hRoom').hidden=mode!=='online'; $('hRoom').textContent='Sala '+net.code;
+ setControls();
+}
+function viewTurn(){
+ if(!G)return; const i=G.cur, p=G.players[i];
+ $('vR').max=vmaxOf();
+ const mine=mode!=='online'||i===net.me;
+ if(mine){$('aR').value=p.a;$('vR').value=p.v||Math.round(vmaxOf()*0.45);setDir(p.dir)}
+ trail=[]; hud();
+}
+function toast(m,ms=2600){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),ms)}
+function card(h){$('card').innerHTML=h;$('overlay').classList.remove('hide')}
+function hide(){$('overlay').classList.add('hide')}
+
+function fire(){
+ if(playing||!myTurn())return;
+ const a=+$('aR').value, v=+$('vR').value, d=dir, i=G.cur;
+ if(mode==='online'){$('fire').disabled=true;net.myAim={a,v,d};net.host?hostShot(net.me,a,v,d):net.hostConn&&net.hostConn.send({t:'shot',a,v,d});return}
+ const res=simulate(i,a,v,d);
+ play(res,()=>{ghosts[i]=res.hit>=0?[]:trail.slice();applyShot(i,res,a,v,d);localAfter(i,res)});
+}
+
+// ===== MESMO APARELHO =====
+function boardHTML(){
+ return `<table><tbody>${G.players.map((p,i)=>`<tr><td><span class="dot" style="background:${colorOf(i)}"></span><b>${esc(p.name)}</b>${mode==='online'&&i===net.me?' <small>· você</small>':''}${mode==='online'&&!p.on?' <small>· saiu</small>':''}${i===G.cur&&!G.over?' ◀':''}</td><td class="r">${p.alive&&p.on?'em pé':'fora'}</td></tr>`).join('')}</tbody></table>`;
+}
+function localAfter(i,res){
+ if(G.over)return winner();
+ const np=G.players[G.cur];
+ card(`<h2>${res.hit>=0?'NA MOSCA!':'Errou!'}</h2><p>${shotText(i,res)}</p>${boardHTML()}<p style="color:${colorOf(G.cur)}"><b>Próximo: ${esc(np.name)}</b></p><button class="cta" id="nx">Jogar · ${esc(np.name)}</button>`);
+ $('nx').onclick=()=>{hide();viewTurn()};
+}
+function winner(){
+ const w=G.winner, on=mode==='online';
+ card(`<h1>VITÓRIA!</h1>${w>=0?`<h2 style="color:${colorOf(w)}">${esc(G.players[w].name)}</h2><p>Último em pé, depois de ${G.round} rodada${G.round>1?'s':''}.</p>`:'<p>Ninguém sobrou em pé!</p>'}${boardHTML()}
+ ${!on||net.host?'<button class="cta" id="rm">Revanche</button>':'<p>O anfitrião pode iniciar a revanche.</p><button class="cta" id="ok">OK</button>'}
+ ${on?'<button class="cta alt" id="lv">Sair da sala</button>':'<button class="cta alt" id="mn">Menu</button>'}`);
+ if($('rm'))$('rm').onclick=()=>{if(on)hostStart();else{newGame(G.players.map(p=>p.name),Date.now()%1e6,pickPlanet());hide();fit();turnCard()}};
+ if($('ok'))$('ok').onclick=hide; if($('lv'))$('lv').onclick=leave; if($('mn'))$('mn').onclick=menu;
+}
+function turnCard(){
+ viewTurn(); const p=G.players[G.cur];
+ card(`<h2 style="color:${colorOf(G.cur)}">Vez de ${esc(p.name)}</h2><p>${planet.n} · gravidade ${fmt(planet.g,2)} G</p>${boardHTML()}<button class="cta" id="go">Jogar</button>`);
+ $('go').onclick=hide;
+}
+const PL_OPTS=[['rand','Sorteio'],...PLANETS.map((p,i)=>[String(i),p.n])];
+function pickPlanet(){return save.planet==='rand'?Math.floor(Math.random()*PLANETS.length):+save.planet}
+function planetField(edit,val){return `<div class="field" style="flex-wrap:wrap"><b>Planeta</b>${edit?`<div class="seg" style="width:100%">${PL_OPTS.map(([k,t])=>`<button data-p="${k}" class="${val===k?'sel':''}">${t}</button>`).join('')}</div>`:`<b>${(PL_OPTS.find(o=>o[0]===val)||PL_OPTS[0])[1]}</b>`}</div>`}
+function bindPlanet(after){document.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>{save.planet=b.dataset.p;store();document.querySelectorAll('[data-p]').forEach(x=>x.classList.toggle('sel',x===b));after&&after()})}
+function localSetup(){
+ let n=clamp(save.names.length||2,2,4); const names=save.names.slice();
+ const grab=()=>document.querySelectorAll('.names input').forEach(x=>names[+x.dataset.i]=x.value);
+ const render=()=>{
+  card(`<h2>MESMO APARELHO</h2><p>De 2 a 4 jogadores, passando o celular de mão em mão.</p>
+  <div class="field"><b>Jogadores</b><div class="num"><button class="step" id="nM">−</button><input id="nI" type="number" min="2" max="4" value="${n}"><button class="step" id="nP">+</button></div></div>
+  <div class="names">${Array.from({length:n},(_,i)=>`<div class="nm"><i style="background:${colorOf(i)}"></i><input data-i="${i}" maxlength="14" placeholder="Jogador ${i+1}" value="${esc(names[i]||'')}"></div>`).join('')}</div>
+  ${planetField(true,save.planet)}
+  <button class="cta" id="go">Começar</button><button class="cta alt" id="bk">Voltar</button>`);
+  const setN=v=>{grab();n=clamp(Math.round(v)||2,2,4);render()};
+  $('nM').onclick=()=>setN(n-1);$('nP').onclick=()=>setN(n+1);$('nI').onchange=e=>setN(+e.target.value);
+  bindPlanet();
+  $('go').onclick=()=>{grab();const ns=Array.from({length:n},(_,i)=>(names[i]||'').trim()||'Jogador '+(i+1));save.names=ns;store();mode='local';newGame(ns,Date.now()%1e6,pickPlanet());fit();turnCard()};
+  $('bk').onclick=menu;
+ };
+ render();
+}
+function menu(){
+ if(mode==='online'&&net.on){card(`<h2>MENU</h2><p>Você está na sala <b>${net.code}</b>.</p><button class="cta" id="bk">Voltar ao jogo</button><button class="cta alt" id="lv">Sair da sala</button>`);$('bk').onclick=hide;$('lv').onclick=leave;return}
+ card(`<h1>PEDRADA</h1><p>Cada jogador fica no topo de um prédio. Escolha a direção, o ângulo e a força e acerte os outros com a pedra. Quem for atingido sai. O último em pé vence.</p>
+ <button class="cta" id="on">Online · cada um no seu celular</button>
+ <button class="cta alt" id="lo">Mesmo aparelho</button>
+ <a class="cta alt" href="../">← Trocar de jogo</a>
+ <p style="font-size:12px;margin-top:12px">Versão 1.0</p>`);
+ $('on').onclick=()=>onlineMenu(); $('lo').onclick=localSetup;
+}
+
+// ===== ONLINE =====
+const net={on:false,host:false,peer:null,conns:new Map(),hostConn:null,me:-1,code:'',started:false,busy:false,pending:null,myAim:null};
+const CODE_CH='ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+const genCode=()=>Array.from({length:5},()=>CODE_CH[Math.floor(Math.random()*CODE_CH.length)]).join('');
+const peerId=c=>'pedrada-v1-'+c.toLowerCase();
+const roomLink=()=>location.origin+location.pathname+'#sala-'+net.code;
+let lobby={players:[],planet:'rand'};
+function loadPeer(){
+ if(window.Peer)return Promise.resolve();
+ const add=src=>new Promise((ok,ko)=>{const s=document.createElement('script');s.src=src;s.onload=ok;s.onerror=ko;document.head.appendChild(s)});
+ return (window.mqtt?Promise.resolve():add('../vendor/mqtt.min.js')).then(()=>add('../vendor/mp.js'));
+}
+function resetNet(){try{net.peer&&net.peer.destroy()}catch(e){}Object.assign(net,{on:false,host:false,peer:null,conns:new Map(),hostConn:null,me:-1,code:'',started:false,busy:false,pending:null,myAim:null});lobby={players:[],planet:save.planet}}
+function onlineMenu(code=''){
+ card(`<h2>ONLINE</h2><p>De 2 a 4 jogadores, cada um no seu celular. Uma pessoa cria a sala e os outros entram com o código.</p>
+ <div class="nm" style="margin:12px 0"><i style="background:var(--case)"></i><input id="myName" maxlength="14" placeholder="Seu nome" value="${esc(save.name||'')}"></div>
+ <button class="cta" id="host">Criar sala</button>
+ <div class="field" style="margin-top:16px"><input id="roomCode" class="codein" maxlength="5" placeholder="CÓDIGO" value="${esc(code)}" autocapitalize="characters"><button class="cta alt" id="join" style="margin:0;width:auto;padding:0 18px">Entrar</button></div>
+ <button class="cta alt" id="bk">Voltar</button>`);
+ const nm=()=>{const v=$('myName').value.trim();if(!v){toast('Digite seu nome primeiro.');return''}save.name=v;store();return v};
+ $('host').onclick=()=>{const v=nm();if(v)hostRoom(v)};
+ $('join').onclick=()=>{const v=nm();if(!v)return;const c=$('roomCode').value.trim().toUpperCase();if(c.length!==5){toast('O código tem 5 letras/números.');return}joinRoom(v,c)};
+ $('bk').onclick=menu;
+}
+function netError(m){resetNet();mode='menu';G=null;card(`<h2>Ops!</h2><p>${m}</p><button class="cta" id="ok">Voltar</button>`);$('ok').onclick=()=>onlineMenu()}
+function leave(){if(net.host)bcast({t:'bye'});resetNet();mode='menu';G=null;history.replaceState(null,'',location.pathname);hud();menu()}
+function connecting(m){card(`<h2>Conectando…</h2><p>${m}</p><button class="cta alt" id="cx">Cancelar</button>`);$('cx').onclick=()=>{resetNet();onlineMenu()}}
+function lobbyCard(){
+ const ps=lobby.players, n=ps.filter(p=>p.on).length;
+ card(`<h2>SALA</h2><div class="code">${net.code}</div>
+ ${net.host?`<p>Mande o código ou o link (até 4 jogadores):</p><p class="link">${esc(roomLink())}</p><button class="cta alt" id="cp">Copiar link</button>`:'<p>Você entrou! Aguardando o anfitrião começar.</p>'}
+ <table><tbody>${ps.map((p,i)=>`<tr><td><span class="dot" style="background:${colorOf(i)}"></span><b>${esc(p.name)}</b> <small>${i===net.me?'· você ':''}${i===0?'· anfitrião':''}${p.on?'':' · fora'}</small></td></tr>`).join('')}</tbody></table>
+ ${planetField(net.host,lobby.planet)}
+ ${net.host?`<button class="cta" id="st" ${n<2?'disabled style="opacity:.5"':''}>Começar (${n} jogador${n>1?'es':''})</button>`:''}
+ <button class="cta alt" id="lv">Sair</button>`);
+ $('lv').onclick=leave;
+ if(!net.host)return;
+ $('cp').onclick=()=>{try{navigator.clipboard.writeText(roomLink()).then(()=>toast('Link copiado!'),()=>toast('Copie o link acima.'))}catch(e){toast('Copie o link acima.')}};
+ bindPlanet(()=>{lobby.planet=save.planet;sendLobby()});
+ $('st').onclick=()=>{if(n>=2)hostStart()};
+}
+function bcast(m){for(const {c} of net.conns.values())if(c.open)try{c.send(m)}catch(e){}}
+function sendLobby(){bcast({t:'lobby',lobby});if(!net.started)lobbyCard()}
+async function hostRoom(name){
+ resetNet(); connecting('Criando a sala.');
+ try{await loadPeer()}catch(e){return netError('Não consegui carregar a conexão online. Verifique a internet.')}
+ net.host=true; net.code=genCode();
+ const peer=new Peer(peerId(net.code)); net.peer=peer;
+ peer.on('open',()=>{mode='online';net.on=true;net.me=0;lobby.players=[{name,pid:'host',on:1}];lobbyCard()});
+ peer.on('error',e=>{if(e.type!=='peer-unavailable')netError(e.type==='network'?'Não consegui falar com o servidor do jogo. Verifique a internet e tente de novo.':'Problema na conexão ('+e.type+').')});
+ peer.on('connection',c=>{c.on('data',d=>hostData(c,d));c.on('close',()=>hostDrop(c))});
+}
+function viewFor(idx,last){
+ const g=JSON.parse(JSON.stringify(G));
+ g.players.forEach((p,j)=>{if(j!==idx){p.a=45;p.v=0}});
+ return {t:'state',G:g,last:last||null};
+}
+function sendState(last){for(const {c,i} of net.conns.values())if(c.open)try{c.send(viewFor(i,last))}catch(e){}onState(viewFor(0,last))}
+function hostData(c,d){
+ const ps=lobby.players;
+ if(d.t==='hello'){
+  let nm=String(d.name||'Jogador').slice(0,14), i=ps.findIndex(p=>!p.on&&p.name===nm);
+  if(i<0){
+   if(net.started||ps.filter(p=>p.on).length>=4){c.send({t:'full'});return}
+   let b=nm,k=2;while(ps.some(p=>p.name===nm))nm=b+' '+k++;
+   i=ps.length;ps.push({name:nm,pid:c.peer,on:1});
+  } else {ps[i].on=1;ps[i].pid=c.peer;if(G&&G.players[i])G.players[i].on=1}
+  net.conns.set(c.peer,{c,i}); c.send({t:'welcome',me:i,code:net.code});
+  toast(nm+' entrou'); if(net.started)sendState(); else sendLobby();
+ } else if(d.t==='shot'){const e=net.conns.get(c.peer);if(e)hostShot(e.i,+d.a,+d.v,d.d<0?-1:1)}
+}
+function hostDrop(c){
+ const e=net.conns.get(c.peer); if(!e)return;
+ net.conns.delete(c.peer); lobby.players[e.i].on=0; toast(lobby.players[e.i].name+' saiu');
+ if(net.started&&G&&!G.over){G.players[e.i].on=0;if(G.cur===e.i&&!net.busy)advance();else{const al=G.players.filter(p=>p.alive&&p.on);if(al.length<=1)advance()}sendState()}
+ else sendLobby();
+}
+function hostStart(){
+ lobby.players=lobby.players.filter((p,i)=>p.on||i===0).slice(0,4);
+ for(const [k,o] of net.conns){o.i=lobby.players.findIndex(p=>p.pid===k);try{o.c.send({t:'welcome',me:o.i,code:net.code})}catch(e){}}
+ const pl=lobby.planet==='rand'?Math.floor(Math.random()*PLANETS.length):+lobby.planet;
+ newGame(lobby.players.map(p=>p.name),Math.floor(Math.random()*1e6),pl);
+ net.started=true; net.busy=false; net.myAim=null;
+ sendState({begin:1});
+}
+function hostShot(i,a,v,d){
+ if(!net.started||G.over||net.busy||i!==G.cur)return;
+ net.busy=true;
+ const res=simulate(i,a,v,d), pm={t:'play',i,res};
+ bcast(pm); onPlay(pm);
+ applyShot(i,res,a,v,d); net.busy=false;
+ sendState({i,hit:res.hit});
+}
+async function joinRoom(name,code){
+ resetNet(); connecting('Entrando na sala '+code+'.');
+ try{await loadPeer()}catch(e){return netError('Não consegui carregar a conexão online. Verifique a internet.')}
+ net.code=code;
+ const peer=new Peer(); net.peer=peer;
+ peer.on('open',()=>{
+  const c=peer.connect(peerId(code),{reliable:true,serialization:'json'}); net.hostConn=c;
+  c.on('open',()=>c.send({t:'hello',name}));
+  c.on('data',d=>{
+   if(d.t==='welcome'){net.me=d.me;net.on=true;mode='online'}
+   else if(d.t==='full')netError('A sala está cheia ou a partida já começou.');
+   else if(d.t==='lobby'){lobby=d.lobby;if(!net.started)lobbyCard()}
+   else if(d.t==='state')onState(d);
+   else if(d.t==='play')onPlay(d);
+   else if(d.t==='bye'){net.on=false;netError('O anfitrião encerrou a sala.')}
+  });
+  c.on('close',()=>{if(net.on)netError('A conexão com a sala caiu. O anfitrião saiu ou a internet oscilou.')});
+ });
+ peer.on('error',e=>netError(e.type==='peer-unavailable'?'A sala '+code+' não existe. Confira o código.':e.type==='network'?'Não consegui falar com o servidor do jogo. Verifique a internet.':'Problema na conexão ('+e.type+').'));
+}
+function onPlay(d){
+ const mine=d.i===net.me;
+ play(d.res,()=>{if(mine)ghosts[d.i]=d.res.hit>=0?[]:trail.slice();const s=net.pending;net.pending=null;if(s)onState(s);else setControls()});
+}
+function onState(d){
+ if(playing){net.pending=d;return}
+ const fresh=!G||(d.G.seed!==G.seed);
+ if(!net.host||fresh)G=d.G;
+ if(fresh){M=makeMap(G.seed,G.players.length);planet=PLANETS[G.pl];ghosts=[];fx=[];fit()}
+ net.started=true;
+ const i=G.cur;
+ $('vR').max=vmaxOf();
+ if(i===net.me){const me=G.players[net.me];if(net.myAim){$('aR').value=net.myAim.a;$('vR').value=net.myAim.v;setDir(net.myAim.d)}else{$('aR').value=45;$('vR').value=Math.round(vmaxOf()*0.45);setDir(me.dir)}}
+ trail=[]; hud();
+ const L=d.last;
+ if(L&&L.begin){card(`<h2>Começou!</h2><p>${planet.n} · gravidade ${fmt(planet.g,2)} G</p>${boardHTML()}${G.cur===net.me?'<p><b>Você começa!</b></p>':''}<button class="cta" id="ok">${G.cur===net.me?'Jogar':'OK'}</button>`);$('ok').onclick=hide;return}
+ if(G.over)return winner();
+ if(L&&L.i!=null){
+  const mine=G.cur===net.me;
+  card(`<h2>${L.hit>=0?'NA MOSCA!':'Errou!'}</h2><p>${shotText(L.i,{hit:L.hit})}</p>${boardHTML()}${mine?'<p><b>Sua vez!</b></p><button class="cta" id="ok">Jogar</button>':`<p style="color:${colorOf(G.cur)}"><b>Agora é a vez de ${esc(G.players[G.cur].name)}.</b></p><button class="cta alt" id="ok">OK</button>`}`);
+  $('ok').onclick=hide; if(mine)beep(660,.1);
+ }
+}
+
+// ===== DESENHO =====
+function resize(){const d=Math.min(2,devicePixelRatio||1);cw=stage.clientWidth;ch=stage.clientHeight;cv.width=cw*d;cv.height=ch*d;ctx.setTransform(d,0,0,d,0,0);fit()}
+function fit(){const gp=20,top=42;S=Math.min(cw/M.W,(ch-gp-top)/M.H);ox=(cw-M.W*S)/2;oy=ch-gp}
+const X=x=>ox+x*S, Y=y=>oy-y*S;
+function drawPerson(i,p,sp){
+ const k=Math.max(S*1.25,8), x=X(sp.x), y=Y(sp.y), col=colorOf(i);
+ if(!p.alive||!p.on){ctx.save();ctx.translate(x,y);ctx.rotate(Math.PI/2*(p.dir||1));ctx.globalAlpha=.55}
+ else ctx.save(), ctx.translate(x,y);
+ ctx.strokeStyle='#2a1c22';ctx.lineWidth=Math.max(2,.2*k);ctx.lineCap='round';
+ ctx.beginPath();ctx.moveTo(-.25*k,0);ctx.lineTo(0,-.9*k);ctx.lineTo(.25*k,0);ctx.stroke();
+ ctx.strokeStyle=col;ctx.lineWidth=Math.max(4,.5*k);ctx.beginPath();ctx.moveTo(0,-.9*k);ctx.lineTo(0,-1.75*k);ctx.stroke();
+ const myAim=G&&!G.over&&i===G.cur&&!playing&&myTurn(), d=myAim?dir:(p.dir||1);
+ const aa=myAim?(+$('aR').value)*Math.PI/180:0.6;
+ ctx.strokeStyle='#2a1c22';ctx.lineWidth=Math.max(2,.18*k);ctx.beginPath();ctx.moveTo(0,-1.6*k);ctx.lineTo(d*Math.cos(aa)*.75*k,-1.6*k-Math.sin(aa)*.75*k);ctx.stroke();
+ ctx.fillStyle='#e0a87e';ctx.beginPath();ctx.arc(0,-2.1*k,Math.max(3,.32*k),0,7);ctx.fill();
+ if(!p.alive){ctx.strokeStyle='#c00';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(-.2*k,-2.3*k);ctx.lineTo(.2*k,-1.9*k);ctx.moveTo(.2*k,-2.3*k);ctx.lineTo(-.2*k,-1.9*k);ctx.stroke()}
+ ctx.restore();
+ ctx.font='800 12px Nunito,sans-serif';ctx.textAlign='center';
+ const t=p.name, tw=ctx.measureText(t).width+10, ty=y-2.7*k-6;
+ ctx.fillStyle=p.alive&&p.on?col:'rgba(60,50,55,.7)';ctx.fillRect(x-tw/2,ty-13,tw,17);ctx.fillStyle='#fff';ctx.fillText(t,x,ty);
+}
+function draw(){
+ const p=planet;
+ const g=ctx.createLinearGradient(0,0,0,ch);g.addColorStop(0,p.sky[0]);g.addColorStop(1,p.sky[1]);ctx.fillStyle=g;ctx.fillRect(0,0,cw,ch);
+ if(p.stars){ctx.fillStyle='#fff';for(const s of M.stars){ctx.globalAlpha=.3+s[2]*.6;ctx.fillRect(s[0]*cw,s[1]*ch,1.5,1.5)}ctx.globalAlpha=1}
+ ctx.fillStyle=p.gr;ctx.fillRect(0,oy,cw,ch-oy);
+ for(const b of M.bs){
+  const x0=X(b.x0),x1=X(b.x1),y=Y(b.h);
+  ctx.fillStyle=b.col;ctx.fillRect(x0,y,x1-x0,oy-y);
+  ctx.fillStyle='rgba(255,255,255,.1)';ctx.fillRect(x1-Math.max(3,.5*S),y,Math.max(3,.5*S),oy-y);
+  ctx.fillStyle='rgba(0,0,0,.28)';ctx.fillRect(x0-2,y-Math.max(3,.35*S),x1-x0+4,Math.max(3,.35*S));
+  for(const w of b.win){ctx.fillStyle=w[2]?'#ffd98a':'rgba(0,0,0,.25)';ctx.fillRect(X(w[0]),Y(w[1]+1.2),.8*S,1.2*S)}
+ }
+ const path=(pts,col,w,dash)=>{if(!pts||pts.length<2)return;ctx.strokeStyle=col;ctx.lineWidth=w;ctx.setLineDash(dash||[]);ctx.beginPath();pts.forEach((q,i)=>i?ctx.lineTo(X(q[0]),Y(q[1])):ctx.moveTo(X(q[0]),Y(q[1])));ctx.stroke();ctx.setLineDash([])};
+ if(G){
+  const mi=myIdx(); if(mode!=='online'||G.cur===net.me)path(ghosts[G.cur],'rgba(255,255,255,.4)',2,[3,5]);
+  path(trail,'rgba(255,220,120,.85)',2.5);
+  G.players.forEach((q,i)=>drawPerson(i,q,M.spots[i]));
+  // seta de mira só para quem está jogando
+  if(!playing&&myTurn()&&!G.over){
+   const sp=M.spots[G.cur], a=(+$('aR').value)*Math.PI/180, v=+$('vR').value, len=(1.5+5*v/(+$('vR').max))*Math.max(S,6);
+   const sx=X(sp.x+dir*0.55), sy=Y(sp.y)-1.6*Math.max(S*1.25,8), ex=sx+dir*Math.cos(a)*len, ey=sy-Math.sin(a)*len;
+   ctx.strokeStyle='#ffcc33';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(sx,sy);ctx.lineTo(ex,ey);ctx.stroke();
+   ctx.fillStyle='#ffcc33';ctx.beginPath();ctx.arc(ex,ey,4,0,7);ctx.fill();
+  }
+ }
+ if(playing&&ballPos){
+  const rp=Math.max(4,RR*S), bx=X(ballPos[0]), by=Y(ballPos[1]);
+  if(by<-rp){ctx.fillStyle='#ccc';ctx.beginPath();ctx.moveTo(bx,6);ctx.lineTo(bx-7,18);ctx.lineTo(bx+7,18);ctx.fill()}
+  else{ctx.save();ctx.translate(bx,by);ctx.rotate(-ballPos[2]);ctx.fillStyle='#8d8f96';ctx.beginPath();ctx.moveTo(rp,0);ctx.lineTo(rp*.4,-rp*.95);ctx.lineTo(-rp*.6,-rp*.8);ctx.lineTo(-rp,.1*rp);ctx.lineTo(-rp*.4,rp*.9);ctx.lineTo(rp*.6,rp*.8);ctx.closePath();ctx.fill();ctx.fillStyle='rgba(255,255,255,.3)';ctx.beginPath();ctx.arc(-rp*.25,-rp*.3,rp*.3,0,7);ctx.fill();ctx.restore()}
+ }
+ for(const f of fx){ctx.globalAlpha=Math.max(0,f.l);ctx.fillStyle=f.c;ctx.beginPath();ctx.arc(X(f.x),Y(f.y),Math.max(1.5,f.r*S),0,7);ctx.fill()}
+ ctx.globalAlpha=1;
+}
+function burst(x,y,big){for(let i=0;i<(big?26:12);i++)fx.push({x,y,vx:(Math.random()-.5)*(big?10:5),vy:Math.random()*(big?9:4),l:1,r:0.15+Math.random()*0.25,c:big?(Math.random()<.5?'#ffcc33':'#ff5a3c'):'#b9a99c'})}
+let last=0;
+function tick(dt){
+ if(playing){
+  const P=playing,f=P.res.f; P.t+=dt*Math.max(1,1/Math.sqrt(planet.g))*60;
+  const i=Math.min(f.length-1,Math.floor(P.t)); ballPos=f[i];
+  if(!trail.length||Math.hypot(ballPos[0]-trail[trail.length-1][0],ballPos[1]-trail[trail.length-1][1])>.3)trail.push([ballPos[0],ballPos[1]]);
+  if(P.t>=f.length-1){
+   if(P.res.imp){burst(P.res.imp[0],P.res.imp[1],P.res.hit>=0);beep(P.res.hit>=0?180:110,P.res.hit>=0?.35:.12,P.res.hit>=0?'sawtooth':'triangle')}
+   playing=null;setControls();P.done();
+  }
+ }
+ for(const f of fx){f.vy-=planet.g*G0*dt*0.6;f.x+=f.vx*dt;f.y+=f.vy*dt;f.l-=dt*0.9}
+ fx=fx.filter(f=>f.l>0);
+}
+function loop(t){const dt=Math.min(.05,(t-last)/1000||0);last=t;tick(dt);draw();requestAnimationFrame(loop)}
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&playing)tick(1e4)});
+let actx;
+function beep(f,d,type='triangle'){try{actx=actx||new(window.AudioContext||window.webkitAudioContext)();const o=actx.createOscillator(),g=actx.createGain();o.frequency.value=f;o.type=type;g.gain.setValueAtTime(.12,actx.currentTime);g.gain.exponentialRampToValueAtTime(.001,actx.currentTime+d);o.connect(g).connect(actx.destination);o.start();o.stop(actx.currentTime+d)}catch(e){}}
+
+$('aR').oninput=$('vR').oninput=upd;
+$('dL').onclick=()=>setDir(-1); $('dR').onclick=()=>setDir(1);
+let hold;
+document.querySelectorAll('.step[data-t]').forEach(b=>{
+ const go=()=>{if(b.disabled)return;const r=$(b.dataset.t+'R'),st=b.dataset.t==='a'?.5:.1;r.value=(+r.value+st*b.dataset.d).toFixed(2);upd()};
+ b.addEventListener('pointerdown',e=>{e.preventDefault();go();hold=setTimeout(function rep(){go();hold=setTimeout(rep,60)},350)});
+ ['pointerup','pointerleave','pointercancel'].forEach(ev=>b.addEventListener(ev,()=>clearTimeout(hold)));
+});
+$('fire').onclick=fire;
+$('menuBtn').onclick=menu;
+new ResizeObserver(resize).observe(stage);
+
+newGame(['Ana','Bia','Caio','Duda'],7,0); G.over=true; resize(); hud();
+const hm=/^#sala-([A-Z0-9]{5})$/i.exec(location.hash);
+hm?onlineMenu(hm[1].toUpperCase()):menu();
+requestAnimationFrame(loop);
+if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('../sw.js').catch(()=>{});
+}
+</script>
+</body>
+</html>
