@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Sky Hoops</title>
+<meta name="description" content="Basquete balístico: acerte a cesta de um prédio para o outro ajustando ângulo, força e gravidade.">
+<meta name="theme-color" content="#1f86a6">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Sky Hoops">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta property="og:title" content="Sky Hoops — Basquete Balístico">
+<meta property="og:description" content="Acerte a cesta de um prédio para o outro. Corrida para a família toda.">
+<meta property="og:image" content="icons/logo.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Nunito:wght@600;800&display=swap" rel="stylesheet">
+<style>
+/* VOICE: brinquedo de fliperama, alegre e tátil
+   IDEA: o mini basquete de catapulta de mesa, ampliado para telhados de prédios
+   PICTURE: cena com dois prédios, arremessador, cesta e o arco da bola
+   COLOUR and TYPE: azul-piscina do brinquedo, laranja da bola, amarelo da alavanca; Bungee + Nunito
+   LAYOUT: cena em cima, painel de catapulta embaixo (lateral no paisagem) */
+:root{--case:#3ab7d8;--case2:#1f86a6;--ball:#ff6a1f;--lever:#ffd23a;--ink:#0d2a36;--panel:#e9f8fd;--mut:#4d7482}
+*{box-sizing:border-box;min-width:0;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--case2);color:var(--ink);font:600 15px/1.3 Nunito,system-ui,sans-serif;overflow:hidden;touch-action:manipulation}
+#app{display:flex;flex-direction:column;height:100%;height:100dvh;padding:env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left)}
+#stage{position:relative;flex:1;min-height:0;margin:8px 8px 0;border-radius:18px;overflow:hidden;border:4px solid var(--case);box-shadow:inset 0 0 0 2px rgba(0,0,0,.15)}
+canvas{display:block;width:100%;height:100%}
+#hud{position:absolute;top:8px;left:8px;right:8px;display:flex;gap:6px;flex-wrap:wrap;pointer-events:none}
+.chip{background:rgba(255,255,255,.88);border-radius:999px;padding:5px 10px;font-size:13px;font-weight:800;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.15)}
+.chip.btn{pointer-events:auto;border:0;font:inherit;font-size:13px;font-weight:800;color:var(--ink);cursor:pointer}
+.chip.on{background:var(--lever)}
+#toast{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);background:rgba(13,42,54,.9);color:#fff;padding:8px 14px;border-radius:12px;font-size:14px;max-width:92%;text-align:center;opacity:0;transition:opacity .25s;pointer-events:none}
+#toast.show{opacity:1}
+#controls{background:var(--case);margin:0;padding:10px 12px calc(10px + env(safe-area-inset-bottom));display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 12px;align-items:center}
+.ctl{display:grid;grid-template-columns:70px 44px minmax(0,1fr) 44px;gap:6px;align-items:center;background:var(--panel);border-radius:14px;padding:4px 6px}
+.ctl label{font-size:11px;color:var(--mut);line-height:1.1}
+.ctl label span{display:block;color:var(--ink);font-size:17px;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+.step{height:44px;border-radius:12px;border:0;background:#fff;color:var(--ink);font-size:20px;font-weight:800;box-shadow:0 2px 0 rgba(0,0,0,.15);cursor:pointer}
+.step:active{transform:translateY(1px);box-shadow:none}
+input[type=range]{width:100%;accent-color:var(--ball);height:32px}
+#fire{grid-column:2;grid-row:1/-1;width:92px;height:92px;border-radius:50%;border:5px solid var(--lever);background:radial-gradient(circle at 35% 30%,#ffb27a,var(--ball) 55%,#c24400);color:#fff;font:400 15px Bungee,sans-serif;box-shadow:0 6px 0 #b88f00;cursor:pointer}
+#fire:active{transform:translateY(3px);box-shadow:0 3px 0 #b88f00}
+#fire:disabled{filter:grayscale(.7) brightness(.85)}
+#gRow{display:none}
+.treino #gRow{display:grid}
+#overlay{position:fixed;inset:0;background:rgba(8,30,40,.55);display:flex;align-items:center;justify-content:center;padding:20px;z-index:5}
+#overlay.hide{display:none}
+.card{background:#fff;border-radius:22px;padding:22px;max-width:380px;width:100%;text-align:center;border:5px solid var(--case);box-shadow:0 10px 30px rgba(0,0,0,.3)}
+.card h1{font:400 34px/1.05 Bungee,sans-serif;margin:0 0 6px;color:var(--ball)}
+.card h2{font:400 26px/1.1 Bungee,sans-serif;margin:0 0 8px}
+.card p{margin:8px 0;color:var(--mut);font-size:15px}
+.card .big{font-size:30px;margin:6px 0}
+.cta{display:block;width:100%;margin-top:10px;min-height:48px;border:0;border-radius:14px;font:400 16px Bungee,sans-serif;cursor:pointer;background:var(--ball);color:#fff;box-shadow:0 4px 0 #b84200}
+.cta.alt{background:var(--case);box-shadow:0 4px 0 var(--case2)}
+.card{max-height:92dvh;overflow:auto}
+.field{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:12px 0;text-align:left}
+.num{display:flex;align-items:center;gap:6px}
+.num .step{width:44px}
+.num input{width:64px;height:44px;text-align:center;font:800 18px Nunito,sans-serif;border:2px solid var(--case);border-radius:12px;color:var(--ink)}
+.names{display:grid;gap:8px;margin:10px 0}
+.nm{position:relative}
+.nm i{position:absolute;left:12px;top:50%;width:16px;height:16px;border-radius:50%;transform:translateY(-50%)}
+.nm input{width:100%;height:44px;border:2px solid #cfe9f2;border-radius:12px;padding:0 12px 0 38px;font:700 16px Nunito,sans-serif;color:var(--ink)}
+.nm input:focus,.num input:focus{outline:3px solid var(--lever);border-color:var(--case)}
+.board{width:100%;border-collapse:collapse;margin:10px 0;text-align:left;font-size:14px}
+.board td{padding:7px 4px;border-bottom:1px solid #e2f1f6;vertical-align:middle}
+.board td.r{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.board small{color:var(--mut)}
+.dot{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:6px;vertical-align:-1px}
+.bar{height:6px;background:#e2f1f6;border-radius:3px;overflow:hidden;margin-top:4px}
+.bar b{display:block;height:100%}
+.chip.who{color:#fff}
+[hidden]{display:none!important}
+button:focus-visible{outline:3px solid var(--lever);outline-offset:2px}
+@media (orientation:landscape) and (max-height:520px){
+ #app{flex-direction:row}
+ #stage{margin:8px 0 8px 8px}
+ #controls{width:310px;grid-template-columns:minmax(0,1fr);align-content:center;padding:8px 10px}
+ #fire{grid-column:1;grid-row:auto;justify-self:center;width:80px;height:80px}
+}
+@media (prefers-reduced-motion:reduce){#toast{transition:none}}
+</style>
+</head>
+<body>
+<div id="app">
+ <div id="stage">
+  <canvas id="cv"></canvas>
+  <div id="hud">
+   <button class="chip btn" id="menuBtn" aria-label="Menu">☰</button>
+   <span class="chip" id="hLevel">Fase 1</span>
+   <span class="chip" id="hPlanet">Terra</span>
+   <span class="chip" id="hTries">Tentativas 0</span>
+   <span class="chip" id="hStars">★ 0</span>
+   <button class="chip btn" id="boardBtn" hidden>Placar</button>
+   <button class="chip btn" id="guideBtn">Guia</button>
+  </div>
+  <div id="toast"></div>
+ </div>
+ <div id="controls">
+  <div class="ctl"><label>Ângulo<span id="aVal">45°</span></label><button class="step" data-t="a" data-d="-1">−</button><input type="range" id="aR" min="-30" max="85" step="0.5" value="45"><button class="step" data-t="a" data-d="1">+</button></div>
+  <div class="ctl"><label>Força<span id="vVal">10 m/s</span></label><button class="step" data-t="v" data-d="-1">−</button><input type="range" id="vR" min="1" max="30" step="0.1" value="10"><button class="step" data-t="v" data-d="1">+</button></div>
+  <div class="ctl" id="gRow"><label>Gravidade<span id="gVal">1,00 G</span></label><button class="step" data-t="g" data-d="-1">−</button><input type="range" id="gR" min="0.1" max="3" step="0.05" value="1"><button class="step" data-t="g" data-d="1">+</button></div>
+  <button id="fire">LANÇAR</button>
+ </div>
+</div>
+<div id="overlay"><div class="card" id="card"></div></div>
+
+<script>
+{
+const $=id=>document.getElementById(id);
+const cv=$('cv'),ctx=cv.getContext('2d'),stage=$('stage');
+const fmt=(n,d=1)=>n.toFixed(d).replace('.',',');
+const G0=9.81, BR=0.45, RIM_R=1.0, RIM_PT=0.1;
+const PLANETS=[
+ {n:'Terra',g:1,sky:['#4fa3f7','#bfe3ff'],gr:'#3f9a52',bld:['#6c7a96','#8b6f5c','#5d8aa8','#9a8a6e']},
+ {n:'Lua',g:0.165,sky:['#03040c','#1b2246'],gr:'#9a9aa3',stars:1,bld:['#585f73','#6f6a80']},
+ {n:'Marte',g:0.38,sky:['#b8532a','#f1b48a'],gr:'#9b3d1c',bld:['#7d4a37','#a0644a']},
+ {n:'Vênus',g:0.9,sky:['#c98d2c','#f6dd9b'],gr:'#a07526',bld:['#8a6a3a','#a8854a']},
+ {n:'Júpiter',g:2.53,sky:['#6e4126','#e3b78c'],gr:'#5b3820',bld:['#5c4636','#7a5a44']},
+ {n:'Planeta X',g:2,sky:['#2a0b4a','#b052cf'],gr:'#2a1446',stars:1,bld:['#3e2a66','#56378a']}
+];
+const SEQ=[0,0,0,2,1,0,4,3,5,0,2,1,4,5,3];
+let mode='campanha', level=1, lvl, S=10, ox=0, oy=0, cw=0, ch=0;
+let tries=0, guide=false, guideUsed=false, flying=false, ball=null, trail=[], ghost=[], netAnim=0, toastT;
+let save={level:1,stars:{},race:null};
+try{save=Object.assign(save,JSON.parse(localStorage.getItem('skyhoops')||'{}'))}catch(e){}
+const store=()=>{try{localStorage.setItem('skyhoops',JSON.stringify(save))}catch(e){}};
+let race=save.race||null, ghosts=[];
+const storeRace=()=>{save.race=race;store()};
+const COLORS=['#ff6a1f','#1f9fd1','#3fae4a','#a64fe0','#e0a800','#ff3f7f','#14a88a','#4b63e8'];
+const colorOf=i=>i<COLORS.length?COLORS[i]:`hsl(${(i*137)%360} 70% 48%)`;
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function rng(seed){return()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+
+function makeLevel(n,seed){
+ const r=rng(seed);
+ let p;
+ if(mode==='treino') p={...PLANETS[0],n:'Treino',g:+$('gR').value};
+ else p=PLANETS[n<=SEQ.length?SEQ[n-1]:Math.floor(r()*PLANETS.length)];
+ const k=Math.min(n,14);
+ const D=Math.min(48,12+k*1.8+r()*8);
+ const hmax=Math.min(32,8+k*2);
+ const h1=5+r()*hmax, h2=5+r()*hmax;
+ const bw1=6+r()*3, bw2=8+r()*3;
+ const x1e=bw1, x2=bw1+D, x2e=x2+bw2;
+ const bx=x2e-1.6, rimY=h2+4;
+ const L={n,p,g:p.g*G0,D,h1,h2,x1e,x2,x2e,bx,rimY,
+  fx:bx-0.15-2*RIM_R, kx:bx-0.15, hx:bx-0.15-RIM_R,
+  lx:x1e-0.9, ly:h1+2.1, px:x1e-1.7};
+ L.rects=[[-40,0,x1e,h1],[x2,0,x2e,h2],[bx,rimY-0.4,bx+0.2,rimY+2.4],[bx+0.2,h2,bx+0.5,rimY-0.4]];
+ L.pts=[[L.fx,rimY],[L.kx,rimY]];
+ L.win=[[],[]];
+ [[0,x1e,h1],[x2,x2e,h2]].forEach((b,i)=>{for(let y=1.5;y<b[2]-1;y+=2.4)for(let x=b[0]+1;x<b[1]-1;x+=1.7)L.win[i].push([x,y,r()<.4])});
+ L.col=[p.bld[Math.floor(r()*p.bld.length)],p.bld[Math.floor(r()*p.bld.length)]];
+ L.sky=[];for(let x=-60;x<x2e+60;x+=4+r()*5)L.sky.push([x,3+r()*4,4+r()*24]);
+ L.st=[];for(let i=0;i<80;i++)L.st.push([r(),r()*.7,r()]);
+ // faixa de força: baseada na menor velocidade que alcança o aro
+ const dx=L.hx-L.lx, dy=rimY+0.6-L.ly; let vmin=1e9;
+ for(let a=5;a<=80;a+=0.5){const t=a*Math.PI/180,den=2*Math.cos(t)**2*(dx*Math.tan(t)-dy);if(den>0)vmin=Math.min(vmin,Math.sqrt(L.g*dx*dx/den))}
+ L.vmin=vmin; L.vmax=Math.ceil(Math.max(vmin*1.7,vmin+8));
+ return L;
+}
+
+function startLevel(n,seed){
+ level=n; const sd=seed??n*7919+13; lvl=makeLevel(n,sd); lvl._seed=sd;
+ tries=0; guideUsed=false; guide=mode!=='treino'&&n<=2; ghost=[]; trail=[]; ball=null; flying=false; netAnim=0;
+ const vR=$('vR'); vR.max=lvl.vmax; vR.value=Math.round(lvl.vmin*0.8*10)/10;
+ $('aR').value=45; upd(); fit(); hud();
+}
+function hud(){
+ const hl=$('hLevel'), rc=mode==='corrida'&&race;
+ hl.textContent=rc?race.players[race.cur].name+' · Fase '+level+'/'+race.target:mode==='treino'?'Treino':'Fase '+level;
+ hl.classList.toggle('who',!!rc); hl.style.background=rc?colorOf(race.cur):'';
+ $('hStars').hidden=!!rc; $('boardBtn').hidden=!rc;
+ $('hPlanet').textContent=lvl.p.n+' · '+fmt(lvl.p.g,2)+' G';
+ $('hTries').textContent='Tentativas '+tries;
+ $('hStars').textContent='★ '+Object.values(save.stars).reduce((a,b)=>a+b,0);
+ $('guideBtn').classList.toggle('on',guide);
+}
+function upd(){
+ $('aVal').textContent=fmt(+$('aR').value)+'°';
+ $('vVal').textContent=fmt(+$('vR').value)+' m/s';
+ $('gVal').textContent=fmt(+$('gR').value,2)+' G';
+}
+function toast(m,ms=2600){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),ms)}
+
+function resize(){
+ const dpr=Math.min(2,devicePixelRatio||1); cw=stage.clientWidth; ch=stage.clientHeight;
+ cv.width=cw*dpr; cv.height=ch*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); fit();
+}
+function fit(){
+ if(!lvl)return; const gp=24, top=44, w0=-3, w1=lvl.x2e+3;
+ const wh=Math.max(lvl.ly,lvl.rimY+2.4)+6;
+ S=Math.min(cw/(w1-w0),(ch-gp-top)/wh);
+ ox=(cw-(w1-w0)*S)/2-w0*S; oy=ch-gp;
+}
+const X=x=>ox+x*S, Y=y=>oy-y*S;
+
+function fire(){
+ if(flying)return;
+ const a=+$('aR').value*Math.PI/180, v=+$('vR').value;
+ ball={x:lvl.lx,y:lvl.ly,vx:v*Math.cos(a),vy:v*Math.sin(a),t:0,rot:0,maxY:lvl.ly,cross:null,hit:false,scored:false,still:0,end:0};
+ if(guide)guideUsed=true;
+ tries++; trail=[]; flying=true; $('fire').disabled=true; hud(); beep(300,.08);
+}
+function collide(cx,cy,e){
+ const b=ball,dx=b.x-cx,dy=b.y-cy,d2=dx*dx+dy*dy;
+ if(d2>=BR*BR)return false;
+ let d=Math.sqrt(d2)||1e-6,nx=dx/d,ny=dy/d; if(d2===0){nx=0;ny=1}
+ b.x=cx+nx*BR; b.y=cy+ny*BR;
+ const vn=b.vx*nx+b.vy*ny;
+ if(vn<0){b.vx-=(1+e)*vn*nx;b.vy-=(1+e)*vn*ny;const tx=-ny,ty=nx,vt=b.vx*tx+b.vy*ty;b.vx-=.15*vt*tx;b.vy-=.15*vt*ty}
+ return true;
+}
+function step(dt){
+ const b=ball,L=lvl,py=b.y;
+ b.vy-=L.g*dt; b.x+=b.vx*dt; b.y+=b.vy*dt; b.t+=dt; b.rot+=b.vx*dt/BR;
+ b.maxY=Math.max(b.maxY,b.y);
+ let touch=false;
+ for(const r of L.rects){const cx=Math.max(r[0],Math.min(b.x,r[2])),cy=Math.max(r[1],Math.min(b.y,r[3]));if(collide(cx,cy,.45)){touch=true;if(r!==L.rects[0]||b.t>.1)b.hit=b.hit||r===L.rects[2]}}
+ for(const p of L.pts){const dx=b.x-p[0],dy=b.y-p[1],d=Math.hypot(dx,dy);if(d<BR+RIM_PT){const nx=dx/d,ny=dy/d;ball.x=p[0]+nx*(BR+RIM_PT);ball.y=p[1]+ny*(BR+RIM_PT);const vn=b.vx*nx+b.vy*ny;if(vn<0){b.vx-=1.6*vn*nx;b.vy-=1.6*vn*ny;if(!b.hit)beep(520,.05)}b.hit=true;touch=true}}
+ if(b.y<BR){b.y=BR;if(b.vy<0)b.vy*=-.4;b.vx*=.9;touch=true}
+ if(!b.scored&&py>L.rimY&&b.y<=L.rimY&&b.vy<0){
+  if(b.x>L.fx+RIM_PT&&b.x<L.kx-RIM_PT){b.scored=true;netAnim=1;beep(880,.12);setTimeout(()=>beep(1175,.15),90)}
+  else if(b.cross===null)b.cross=b.x-L.hx;
+ }
+ if(touch&&Math.hypot(b.vx,b.vy)<.6)b.still+=dt;else b.still=0;
+ const out=b.x<-25||b.x>L.x2e+25||b.y<-3||b.t>20||b.still>.4;
+ if(b.scored)b.end+=dt;
+ if(out||b.end>1.1)finish();
+}
+function finish(){
+ flying=false; ghost=trail.slice(); $('fire').disabled=false; const b=ball;
+ let m='';
+ if(!b.scored){
+  if(b.maxY<lvl.rimY)m='Faltou altura: a bola subiu até '+fmt(b.maxY)+' m e o aro está a '+fmt(lvl.rimY)+' m.';
+  else if(b.cross!==null)m=b.cross<0?'Curta! Caiu '+fmt(-b.cross)+' m antes da cesta.':'Longa! Passou '+fmt(b.cross)+' m além da cesta.';
+  else m=b.hit?'Bateu na tabela/aro e não entrou.':'Errou! Ajuste ângulo e força.';
+ }
+ if(mode==='corrida')return raceAfter(b.scored,m,b.hit);
+ if(b.scored){
+  let st=tries===1?3:tries<=3?2:1; if(guideUsed&&!(mode==='campanha'&&level<=2))st=Math.min(st,2);
+  if(mode==='campanha'){save.stars[level]=Math.max(save.stars[level]||0,st);save.level=Math.max(save.level,level+1);store()}
+  hud(); showWin(st,b.hit);
+ } else toast(m,3200);
+}
+
+// ===== CORRIDA MULTIJOGADOR =====
+function boardHTML(){
+ const r=race.players.map((p,i)=>({p,i})).sort((a,b)=>(b.p.level-a.p.level)||(a.p.tries-b.p.tries));
+ return `<table class="board"><tbody>${r.map(({p,i},k)=>`<tr><td>${k+1}º</td><td><span class="dot" style="background:${colorOf(i)}"></span><b>${esc(p.name)}</b>${i===race.cur&&!race.over?' ◀':''}<div class="bar"><b style="width:${Math.min(p.level-1,race.target)/race.target*100}%;background:${colorOf(i)}"></b></div></td><td class="r">${p.level>race.target?'Chegou!':'Fase '+p.level}<br><small>${p.tries} arremesso${p.tries===1?'':'s'}</small></td></tr>`).join('')}</tbody></table>`;
+}
+function newRace(names,target){
+ race={target,cur:0,round:1,over:false,players:names.map((n,i)=>({name:n,level:1,tries:0,lt:0,hits:0,fin:0,a:45,v:0,at:0}))};
+ ghosts=[]; mode='corrida'; document.body.classList.remove('treino'); storeRace();
+}
+function turn(showCard=true){
+ mode='corrida'; document.body.classList.remove('treino');
+ const i=race.cur,p=race.players[i];
+ startLevel(p.level); tries=p.lt; ghost=ghosts[i]||[];
+ if(p.at===p.level&&p.v){$('aR').value=p.a;$('vR').value=p.v;upd()}
+ hud();
+ if(!showCard){hide();return}
+ card(`<h2 style="color:${colorOf(i)}">Vez de ${esc(p.name)}</h2><p>Fase ${p.level} de ${race.target} · ${lvl.p.n} (${fmt(lvl.p.g,2)} G) · rodada ${race.round}</p>${boardHTML()}<button class="cta" id="play">Jogar</button><button class="cta alt" id="mn">Menu</button>`);
+ $('play').onclick=hide; $('mn').onclick=menu;
+}
+function raceAfter(hit,msg,touched){
+ const i=race.cur,p=race.players[i];
+ p.tries++; p.lt=tries; p.a=+$('aR').value; p.v=+$('vR').value; p.at=p.level; ghosts[i]=ghost;
+ if(hit){p.hits++;p.level++;p.lt=0;p.at=0;ghosts[i]=[];if(p.level>race.target&&!p.fin)p.fin=race.round}
+ let nx=i+1;
+ if(nx>=race.players.length){
+  if(race.players.some(q=>q.fin)){storeRace();return winner()}
+  nx=0; race.round++;
+ }
+ race.cur=nx; storeRace(); hud();
+ const solo=race.players.length===1;
+ if(solo&&!hit){toast(msg,3200);tries=p.lt;hud();return}
+ const np=race.players[nx];
+ let head;
+ if(p.fin&&hit)head=`<h2>CHEGOU!</h2><p><b>${esc(p.name)}</b> passou da fase ${race.target}! Quem ainda não jogou nesta rodada tem a última chance de empatar.</p>`;
+ else if(hit)head=`<h2>CESTA!</h2><p><b>${esc(p.name)}</b> ${touched?'acertou (com aro)':'acertou de chuá'} e avança para a fase ${p.level}.</p>`;
+ else head=`<h2>Errou!</h2><p><b>${esc(p.name)}</b>: ${msg}<br>Continua na fase ${p.level}.</p>`;
+ card(`${head}${boardHTML()}<p style="color:${colorOf(nx)}"><b>Próximo: ${esc(np.name)} · Fase ${np.level}</b></p><button class="cta" id="nt">${solo?'Continuar':'Jogar · '+esc(np.name)}</button>`);
+ $('nt').onclick=()=>turn(false);
+}
+function winner(){
+ race.over=true; storeRace();
+ const f=race.players.map((p,i)=>({p,i})).filter(o=>o.p.fin).sort((a,b)=>a.p.tries-b.p.tries);
+ const w=f[0], tie=f.length>1&&f[1].p.tries===w.p.tries;
+ const note=f.length>1?(tie?'Empate total: mesma rodada e mesmo número de arremessos!':'Mais de um chegou na mesma rodada; venceu quem usou menos arremessos.'):'';
+ card(`<h1>VITÓRIA!</h1><div class="big" style="color:${colorOf(w.i)}">★ ★ ★</div><h2 style="color:${colorOf(w.i)}">${tie?f.filter(o=>o.p.tries===w.p.tries).map(o=>esc(o.p.name)).join(' e '):esc(w.p.name)}</h2>
+ <p>Chegou ao fim da fase ${race.target} em ${w.p.tries} arremessos, na rodada ${w.p.fin}.</p>${note?`<p>${note}</p>`:''}${boardHTML()}
+ <button class="cta" id="rm">Revanche</button><button class="cta alt" id="nr">Nova corrida</button><button class="cta alt" id="mn">Menu</button>`);
+ $('rm').onclick=()=>{newRace(race.players.map(p=>p.name),race.target);turn()};
+ $('nr').onclick=setup; $('mn').onclick=menu;
+}
+function setup(){
+ let names=race?race.players.map(p=>p.name):[], n=Math.max(2,names.length), target=race?race.target:10;
+ const grab=()=>document.querySelectorAll('.names input').forEach(x=>names[+x.dataset.i]=x.value);
+ const render=()=>{
+  card(`<h2>CORRIDA</h2><p>Cada um arremessa uma vez por rodada. Acertou, avança de fase; errou, fica. Quem passar primeiro da fase final vence.</p>
+  <div class="field"><b>Jogadores</b><div class="num"><button class="step" id="nM" aria-label="Menos jogadores">−</button><input id="nI" type="number" inputmode="numeric" min="1" value="${n}"><button class="step" id="nP" aria-label="Mais jogadores">+</button></div></div>
+  <div class="names">${Array.from({length:n},(_,i)=>`<div class="nm"><i style="background:${colorOf(i)}"></i><input data-i="${i}" maxlength="16" placeholder="Jogador ${i+1}" value="${esc(names[i]||'')}" aria-label="Nome do jogador ${i+1}"></div>`).join('')}</div>
+  <div class="field"><b>Fase final</b><div class="num"><button class="step" id="tM" aria-label="Menos fases">−</button><input id="tI" type="number" inputmode="numeric" min="1" value="${target}"><button class="step" id="tP" aria-label="Mais fases">+</button></div></div>
+  <button class="cta" id="go">Começar corrida</button><button class="cta alt" id="bk">Voltar</button>`);
+  const setN=v=>{grab();n=Math.max(1,Math.min(200,Math.round(v)||1));render()};
+  const setT=v=>{target=Math.max(1,Math.min(99,Math.round(v)||1));$('tI').value=target};
+  $('nM').onclick=()=>setN(n-1); $('nP').onclick=()=>setN(n+1); $('nI').onchange=e=>setN(+e.target.value);
+  $('tM').onclick=()=>setT(target-1); $('tP').onclick=()=>setT(target+1); $('tI').onchange=e=>setT(+e.target.value);
+  $('go').onclick=()=>{grab();setT(+$('tI').value);newRace(Array.from({length:n},(_,i)=>(names[i]||'').trim()||'Jogador '+(i+1)),target);turn()};
+  $('bk').onclick=menu;
+ };
+ render();
+}
+function showWin(st,hit){
+ const msg=hit?'Entrou depois de tocar no aro.':'Chuá! Direto, sem tocar no aro.';
+ card(`<h2>CESTA!</h2><div class="big">${'★'.repeat(st)}${'☆'.repeat(3-st)}</div>
+ <p>${msg}</p><p>${tries} tentativa${tries>1?'s':''} · ${fmt(+$('aR').value)}° · ${fmt(+$('vR').value)} m/s · ${lvl.p.n}</p>
+ <button class="cta" id="next">${mode==='treino'?'Novo desafio':'Próxima fase'}</button>
+ <button class="cta alt" id="again">Repetir fase</button>`);
+ $('next').onclick=()=>{hide();mode==='treino'?startLevel(5+Math.floor(Math.random()*10),Date.now()):startLevel(level+1)};
+ $('again').onclick=()=>{hide();const s=lvl;tries=0;ghost=[];hud()};
+}
+function card(h){$('card').innerHTML=h;$('overlay').classList.remove('hide')}
+function hide(){$('overlay').classList.add('hide')}
+function menu(){
+ const live=race&&!race.over;
+ card(`<h1>SKY HOOPS</h1><p>Do topo de um prédio, acerte a cesta no outro. Escolha o <b>ângulo</b> e a <b>força</b> da catapulta. Cada fase muda a distância, as alturas e a gravidade do planeta.</p>
+ ${live?`<button class="cta" id="cr">Continuar corrida · rodada ${race.round}</button>`:''}
+ <button class="cta${live?' alt':''}" id="nrc">Corrida · vários jogadores</button>
+ <button class="cta alt" id="camp">${save.level>1?'Solo · continuar fase '+save.level:'Solo · campanha'}</button>
+ ${save.level>1?'<button class="cta alt" id="reset">Solo · recomeçar da fase 1</button>':''}
+ <button class="cta alt" id="trn">Treino · gravidade livre</button>`);
+ if(live)$('cr').onclick=()=>turn();
+ $('nrc').onclick=setup;
+ $('camp').onclick=()=>{mode='campanha';document.body.classList.remove('treino');hide();startLevel(save.level)};
+ $('trn').onclick=()=>{mode='treino';document.body.classList.add('treino');hide();startLevel(6,Date.now())};
+ if($('reset'))$('reset').onclick=()=>{save={level:1,stars:{}};store();mode='campanha';document.body.classList.remove('treino');hide();startLevel(1)};
+}
+
+let actx;
+function beep(f,d){try{actx=actx||new(window.AudioContext||window.webkitAudioContext)();const o=actx.createOscillator(),g=actx.createGain();o.frequency.value=f;o.type='triangle';g.gain.setValueAtTime(.12,actx.currentTime);g.gain.exponentialRampToValueAtTime(.001,actx.currentTime+d);o.connect(g).connect(actx.destination);o.start();o.stop(actx.currentTime+d)}catch(e){}}
+
+function predict(frac){
+ const a=+$('aR').value*Math.PI/180,v=+$('vR').value,vx=v*Math.cos(a),vy=v*Math.sin(a),pts=[];
+ const tEnd=vx>0.1?Math.abs((lvl.hx-lvl.lx)/vx)*frac:1;
+ for(let t=0;t<=tEnd;t+=tEnd/24)pts.push([lvl.lx+vx*t,lvl.ly+vy*t-lvl.g*t*t/2]);
+ return pts;
+}
+
+function draw(){
+ const L=lvl,p=L.p;
+ const g=ctx.createLinearGradient(0,0,0,ch);g.addColorStop(0,p.sky[0]);g.addColorStop(1,p.sky[1]);
+ ctx.fillStyle=g;ctx.fillRect(0,0,cw,ch);
+ if(p.stars){ctx.fillStyle='#fff';for(const s of L.st){ctx.globalAlpha=.3+s[2]*.6;ctx.fillRect(s[0]*cw,s[1]*ch,1.5,1.5)}ctx.globalAlpha=1}
+ ctx.fillStyle='rgba(0,0,0,.14)';for(const b of L.sky)ctx.fillRect(X(b[0]),Y(b[2]),b[1]*S,b[2]*S);
+ ctx.fillStyle=p.gr;ctx.fillRect(0,oy,cw,ch-oy);
+ // prédios
+ [[ -40,L.x1e,L.h1],[L.x2,L.x2e,L.h2]].forEach((b,i)=>{
+  const x0=X(Math.max(b[0],-6)),x1=X(b[1]),y=Y(b[2]);
+  ctx.fillStyle=L.col[i];ctx.fillRect(x0,y,x1-x0,oy-y);
+  ctx.fillStyle='rgba(255,255,255,.12)';ctx.fillRect(x1-Math.max(3,.6*S),y,Math.max(3,.6*S),oy-y);
+  ctx.fillStyle='rgba(0,0,0,.25)';ctx.fillRect(x0-2,y-Math.max(3,.4*S),x1-x0+4,Math.max(3,.4*S));
+  for(const w of L.win[i]){if(w[0]<-6)continue;ctx.fillStyle=w[2]?'#ffe9a3':'rgba(0,0,0,.25)';ctx.fillRect(X(w[0]),Y(w[1]+1.3),.9*S,1.3*S)}
+ });
+ // medidas
+ ctx.setLineDash([4,4]);ctx.strokeStyle='rgba(255,255,255,.75)';ctx.lineWidth=1.5;
+ const my=Math.min(L.h1,L.h2)*0.5;
+ ctx.beginPath();ctx.moveTo(X(L.lx),Y(my));ctx.lineTo(X(L.hx),Y(my));ctx.stroke();
+ ctx.beginPath();ctx.moveTo(X(L.hx-1.6),Y(L.ly));ctx.lineTo(X(L.hx-1.6),Y(L.rimY));ctx.stroke();
+ ctx.setLineDash([]);
+ ctx.font='800 12px Nunito,sans-serif';ctx.textAlign='center';
+ const lab=(t,x,y)=>{const w=ctx.measureText(t).width+10;ctx.fillStyle='rgba(13,42,54,.8)';ctx.fillRect(x-w/2,y-9,w,18);ctx.fillStyle='#fff';ctx.fillText(t,x,y+4)};
+ lab('distância '+fmt(L.hx-L.lx)+' m',X((L.lx+L.hx)/2),Y(my));
+ const dh=L.rimY-L.ly; lab((dh>=0?'▲ ':'▼ ')+fmt(Math.abs(dh))+' m',X(L.hx-1.6)-34,Y((L.ly+L.rimY)/2));
+ // poste, tabela, aro, rede
+ ctx.fillStyle='#8c96a3';ctx.fillRect(X(L.bx+.2),Y(L.rimY-.4),.3*S,(L.rimY-.4-L.h2)*S);
+ ctx.fillStyle='#fff';ctx.fillRect(X(L.bx),Y(L.rimY+2.4),Math.max(3,.2*S),2.8*S);
+ ctx.strokeStyle='#e33';ctx.lineWidth=Math.max(1,.08*S);ctx.strokeRect(X(L.bx),Y(L.rimY+1.2),Math.max(3,.2*S),1*S);
+ const nl=1.3+netAnim*.6, sw=Math.sin(netAnim*12)*netAnim*.2;
+ ctx.strokeStyle='rgba(255,255,255,.9)';ctx.lineWidth=1;
+ for(let i=0;i<=4;i++){const t=i/4,xa=L.fx+t*(L.kx-L.fx),xb=L.fx+.35+t*(L.kx-L.fx-.7)+sw;ctx.beginPath();ctx.moveTo(X(xa),Y(L.rimY));ctx.lineTo(X(xb),Y(L.rimY-nl));ctx.stroke()}
+ for(let j=1;j<=2;j++){const f=j/3;ctx.beginPath();ctx.moveTo(X(L.fx+.35*f+sw*f),Y(L.rimY-nl*f));ctx.lineTo(X(L.kx-.35*f+sw*f),Y(L.rimY-nl*f));ctx.stroke()}
+ ctx.strokeStyle='#ff5a14';ctx.lineWidth=Math.max(3,.18*S);ctx.beginPath();ctx.moveTo(X(L.fx),Y(L.rimY));ctx.lineTo(X(L.kx),Y(L.rimY));ctx.stroke();
+ // fantasma e rastro
+ const path=(pts,col,w,dash)=>{if(pts.length<2)return;ctx.strokeStyle=col;ctx.lineWidth=w;ctx.setLineDash(dash||[]);ctx.beginPath();pts.forEach((q,i)=>i?ctx.lineTo(X(q[0]),Y(q[1])):ctx.moveTo(X(q[0]),Y(q[1])));ctx.stroke();ctx.setLineDash([])};
+ path(ghost,'rgba(255,255,255,.35)',2,[3,5]);
+ path(trail,'rgba(255,210,58,.9)',2.5);
+ if(!flying&&guide)path(predict(.35),'rgba(255,255,255,.95)',3,[2,6]);
+ // arremessador
+ const a=+$('aR').value*Math.PI/180,k=S,fx=X(L.px),fy=Y(L.h1);
+ ctx.strokeStyle='#14303c';ctx.lineWidth=Math.max(2,.22*k);ctx.lineCap='round';
+ ctx.beginPath();ctx.moveTo(fx-.3*k,fy);ctx.lineTo(fx,fy-.9*k);ctx.lineTo(fx+.3*k,fy);ctx.stroke();
+ ctx.strokeStyle=mode==='corrida'&&race?colorOf(race.cur):'#ffd23a';ctx.lineWidth=Math.max(3,.45*k);ctx.beginPath();ctx.moveTo(fx,fy-.9*k);ctx.lineTo(fx,fy-1.7*k);ctx.stroke();
+ ctx.strokeStyle='#14303c';ctx.lineWidth=Math.max(2,.2*k);ctx.beginPath();ctx.moveTo(fx,fy-1.6*k);ctx.lineTo(X(L.lx),Y(L.ly));ctx.stroke();
+ ctx.fillStyle='#c98a5e';ctx.beginPath();ctx.arc(fx,fy-2.05*k,Math.max(3,.3*k),0,7);ctx.fill();
+ // seta de mira
+ if(!flying){const v=+$('vR').value,len=(1.5+5*v/L.vmax)*S,sx=X(L.lx),sy=Y(L.ly),ex=sx+Math.cos(a)*len,ey=sy-Math.sin(a)*len;
+  ctx.strokeStyle='#ffd23a';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(sx,sy);ctx.lineTo(ex,ey);ctx.stroke();
+  ctx.fillStyle='#ffd23a';ctx.beginPath();ctx.moveTo(ex+Math.cos(a)*8,ey-Math.sin(a)*8);ctx.lineTo(ex+Math.sin(a)*6,ey+Math.cos(a)*6);ctx.lineTo(ex-Math.sin(a)*6,ey-Math.cos(a)*6);ctx.fill()}
+ // bola
+ const bx=ball&&(flying||ball.scored)?ball.x:L.lx, by=ball&&(flying||ball.scored)?ball.y:L.ly, rot=ball?ball.rot:0, rp=Math.max(5,BR*S);
+ if(Y(by)<-rp){ctx.fillStyle='#ff6a1f';ctx.beginPath();ctx.moveTo(X(bx),6);ctx.lineTo(X(bx)-7,18);ctx.lineTo(X(bx)+7,18);ctx.fill();ctx.fillStyle='#fff';ctx.fillText(fmt(by,0)+' m',X(bx),32)}
+ else{ctx.save();ctx.translate(X(bx),Y(by));ctx.rotate(-rot);ctx.fillStyle='#ff6a1f';ctx.beginPath();ctx.arc(0,0,rp,0,7);ctx.fill();
+  ctx.strokeStyle='#7a2a00';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(-rp,0);ctx.lineTo(rp,0);ctx.moveTo(0,-rp);ctx.lineTo(0,rp);ctx.stroke();ctx.restore()}
+}
+
+let last=0;
+function loop(t){
+ const dt=Math.min(.05,(t-last)/1000||0);last=t;
+ if(flying&&ball){
+  const ts=Math.max(1,1/Math.sqrt(lvl.p.g));
+  const n=Math.ceil(dt*ts*240);for(let i=0;i<n&&flying;i++)step(dt*ts/n);
+  if(trail.length===0||Math.hypot(ball.x-trail[trail.length-1][0],ball.y-trail[trail.length-1][1])>.3)trail.push([ball.x,ball.y]);
+ }
+ if(netAnim>0)netAnim=Math.max(0,netAnim-dt*1.2);
+ if(lvl)draw();
+ requestAnimationFrame(loop);
+}
+
+// controles
+$('aR').oninput=$('vR').oninput=upd;
+$('gR').oninput=()=>{upd();if(mode==='treino'&&!flying){lvl.p.g=+$('gR').value;const keepA=$('aR').value;const s=lvl;lvl=makeLevel(level,s._seed);lvl._seed=s._seed;$('vR').max=lvl.vmax;$('aR').value=keepA;fit();hud()}};
+let hold;
+document.querySelectorAll('.step').forEach(b=>{
+ const go=()=>{const r=$(b.dataset.t+'R'),st=b.dataset.t==='g'?.05:b.dataset.t==='a'?.5:.1;r.value=(+r.value+st*b.dataset.d).toFixed(2);r.dispatchEvent(new Event('input'))};
+ b.addEventListener('pointerdown',e=>{e.preventDefault();go();hold=setTimeout(function rep(){go();hold=setTimeout(rep,60)},350)});
+ ['pointerup','pointerleave','pointercancel'].forEach(ev=>b.addEventListener(ev,()=>clearTimeout(hold)));
+});
+$('fire').onclick=fire;
+$('guideBtn').onclick=()=>{guide=!guide;hud();if(guide&&!(mode==='campanha'&&level<=2))toast('Guia ligado: a fase vale no máximo 2 estrelas.')};
+$('menuBtn').onclick=menu;
+$('boardBtn').onclick=()=>{if(!race||flying)return;card(`<h2>PLACAR</h2><p>Corrida até a fase ${race.target} · rodada ${race.round}</p>${boardHTML()}<button class="cta" id="cl">Fechar</button>`);$('cl').onclick=hide};
+new ResizeObserver(resize).observe(stage);
+
+startLevel(save.level);
+resize();
+menu();
+requestAnimationFrame(loop);
+if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('sw.js').catch(()=>{});
+}
+</script>
+</body>
+</html>
