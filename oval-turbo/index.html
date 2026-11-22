@@ -88,7 +88,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--yel);outline-of
   <div class="box"><small>TEMPO</small><span id="hTime">0:00,0</span></div>
   <div class="box" id="passBox"><small>PASSOU</small><span id="hPass">0</span></div>
   <button class="box hb" id="ctrBtn" hidden><small>INCLINAÇÃO</small>Centrar</button>
-  <div class="box" id="drBox" hidden style="background:#1f6fe0;margin-left:auto"><small>VÁCUO</small>+1/2s</div>
+  <div class="box" id="drBox" hidden style="background:#1f6fe0;margin-left:auto"><small>VÁCUO</small>+2/s</div>
   <div class="box" id="spd"><small>KM/H</small><span id="hSpd">0</span></div>
  </div>
  <div id="cdown"></div>
@@ -207,14 +207,13 @@ function update(dt){
  R.x-=dx*sp*seg.curve*CENT*(1-0.35*seg.bank);
  if(R.x>-1&&R.x<1)R.x-=dt*0.35*seg.bank*Math.max(0,0.5-sp);
  bgOff+=seg.curve*sp*dt*0.6;
- // velocidade máxima variável: sobe na reta (1 km/h a cada 3 s; no vácuo, a cada 2 s)
- // e cai dentro da curva (1 km/h a cada 2 s), mesmo de pé embaixo
+ // velocidade máxima variável: na reta, de pé embaixo, sobe 1 km/h por segundo para quem lidera
+ // e 1 km/h a cada meio segundo para quem está atrás (vácuo); dentro da curva cai 1 km/h a cada 2 s
  const inCurve=Math.abs(seg.curve)>0.5;
- R.draft=false;
- if(!inCurve&&R.online&&!R.fin){const Pn=mod(START+R.dist,L);for(const o of others()){const rel=mod(o.z-Pn,L);if(rel>300&&rel<5000&&Math.abs(o.x-R.x)<0.45){R.draft=true;break}}}
+ R.draft=!inCurve&&R.online&&!R.fin&&myPos()>1;
  if(!R.fin){
   if(inCurve)R.top=Math.max(280,R.top-dt/2);
-  else if(gas)R.top+=dt/(R.draft?2:3);
+  else if(gas)R.top+=dt*(R.draft?2:1);
  }
  const cap=MAXS*R.top/KMH;
  if(R.fin)R.speed+=DEC*1.5*dt;
@@ -415,12 +414,12 @@ function bindCar(){
 function menu(){
  if(R&&R.online&&net.on){card(`<h2>PAUSA</h2><p>Corrida online na sala <b>${net.code}</b>. O jogo continua para os outros.</p><button class="cta" id="bk">Voltar à pista</button><button class="cta alt" id="lv">Sair da sala</button>`);$('bk').onclick=hide;$('lv').onclick=leave;return}
  paused=!!R; sound.stop();
- card(`<h1>OVAL TURBO</h1><p>Corrida no oval com curvas inclinadas. Um dedo no acelerador, o outro na direção. Na reta, de pé embaixo, a velocidade máxima passa de 320 km/h e vai subindo; atrás de outro piloto, o vácuo faz subir mais rápido. Dentro da curva ela cai: faça a tangência pela linha de dentro, que é mais curta. Nas curvas 1 e 2 (muro amarelo e preto) é preciso dosar o acelerador para não ir para o muro. Desvie dos carros mais lentos: bater na traseira faz perder velocidade.</p>
+ card(`<h1>OVAL TURBO</h1><p>Corrida no oval com curvas inclinadas. Um dedo no acelerador, o outro na direção. Na reta, de pé embaixo, a velocidade máxima passa de 320 km/h e sobe 1 km/h por segundo; quem está atrás pega o vácuo e sobe o dobro. Dentro da curva ela cai: faça a tangência pela linha de dentro, que é mais curta. Nas curvas 1 e 2 (muro amarelo e preto) é preciso dosar o acelerador para não ir para o muro. Desvie dos carros mais lentos: bater na traseira faz perder velocidade.</p>
  ${R&&!R.fin&&!R.online?'<button class="cta" id="rs">Continuar corrida</button>':''}
  <button class="cta${R&&!R.fin&&!R.online?' alt':''}" id="on">Online · corrida com a galera</button>
  <button class="cta alt" id="so">Solo · contra o relógio</button>
  <a class="cta alt" href="../" style="text-decoration:none;line-height:48px">← Trocar de jogo</a>
- <p style="font-size:12px;margin-top:12px">Versão 1.4</p>`);
+ <p style="font-size:12px;margin-top:12px">Versão 1.5</p>`);
  if($('rs'))$('rs').onclick=()=>{paused=false;hide();sound.start()};
  $('on').onclick=()=>{paused=false;onlineMenu()};
  $('so').onclick=()=>{paused=false;soloSetup()};
