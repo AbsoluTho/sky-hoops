@@ -1,6 +1,13 @@
 <p align="center"><img src="icons/logo.png" alt="Sky Hoops" width="600"></p>
 
-# Sky Hoops — Basquete Balístico
+# Sky Hoops — Jogos
+
+A página inicial deixa escolher o jogo:
+
+- **Sky Hoops** (`basquete/`) — basquete galáctico
+- **Oval Turbo** (`oval-turbo/`) — corrida no oval com curvas inclinadas, estilo Enduro; acelerador + botões ou inclinação do aparelho, travado na horizontal; solo ou online
+
+## Sky Hoops — Basquete Balístico
 
 Do topo de um prédio, acerte a cesta no telhado do outro. Ajuste o **ângulo** e a **força** da catapulta; cada fase muda a distância, a altura dos prédios e a gravidade do planeta (Terra, Lua, Marte, Vênus, Júpiter e Planeta X).
 
@@ -22,6 +29,8 @@ Depois de instalado, o jogo abre em tela cheia e funciona sem internet.
 
 ## Arquivos
 
-- `index.html` — o jogo inteiro (HTML, CSS e JavaScript, sem dependências)
+- `index.html` — tela de escolha do jogo
+- `basquete/index.html` — Sky Hoops
+- `oval-turbo/index.html` — Oval Turbo
 - `manifest.webmanifest` e `sw.js` — instalação como app e funcionamento offline
 - `icons/` — ícone e logo

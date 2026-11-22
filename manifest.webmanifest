@@ -1,7 +1,7 @@
 {
-  "name": "Sky Hoops — Basquete Balístico",
+  "name": "Sky Hoops — Jogos",
   "short_name": "Sky Hoops",
-  "description": "Acerte a cesta de um prédio para o outro ajustando ângulo, força e gravidade. Corrida para vários jogadores.",
+  "description": "Jogos para a família: Sky Hoops (basquete galáctico) e Oval Turbo (corrida no oval).",
   "lang": "pt-BR",
   "start_url": "./",
   "scope": "./",

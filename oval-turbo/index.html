@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Oval Turbo</title>
+<meta name="theme-color" content="#15161a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="description" content="Corrida no oval com curvas inclinadas, estilo Enduro. Online com a galera.">
+<meta name="apple-mobile-web-app-title" content="Oval Turbo">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Nunito:wght@600;800&display=swap" rel="stylesheet">
+<style>
+/* VOICE: fliperama de corrida, alto contraste, energia de largada
+   IDEA: o Enduro do Atari levado para um oval com curvas inclinadas
+   PICTURE: a própria pista em pseudo-3D ocupando a tela inteira
+   COLOUR and TYPE: asfalto grafite, vermelho de corrida, amarelo de bandeira; Bungee + Nunito
+   LAYOUT: pista em tela cheia, painel no topo, pedais nos cantos inferiores */
+:root{--ink:#15161a;--red:#e3262f;--yel:#ffcc00;--panel:#fff;--mut:#5d6470}
+*{box-sizing:border-box;min-width:0;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
+html,body{margin:0;height:100%;background:#15161a;color:#fff;font:600 15px/1.3 Nunito,system-ui,sans-serif;overflow:hidden;touch-action:none}
+#game{position:fixed;inset:0}
+canvas{display:block;width:100%;height:100%}
+#hud{position:absolute;top:calc(8px + env(safe-area-inset-top));left:calc(8px + env(safe-area-inset-left));right:calc(8px + env(safe-area-inset-right));display:flex;gap:6px;align-items:flex-start;pointer-events:none}
+.box{background:rgba(10,10,14,.72);border:2px solid rgba(255,255,255,.15);border-radius:12px;padding:5px 10px;font:400 14px Bungee,sans-serif;white-space:nowrap}
+.box small{display:block;font:800 10px Nunito,sans-serif;color:#aab;letter-spacing:.04em}
+#spd{margin-left:auto;text-align:right;font-size:22px}
+#spd small{text-align:right}
+.hb{pointer-events:auto;border:0;cursor:pointer;color:#fff}
+#pedals{position:absolute;left:0;right:0;bottom:0;padding:0 calc(12px + env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left));display:flex;justify-content:space-between;align-items:flex-end;pointer-events:none}
+.grp{display:flex;gap:10px;align-items:flex-end}
+.pd{pointer-events:auto;border:0;border-radius:20px;font:400 15px Bungee,sans-serif;color:#fff;width:96px;height:96px;box-shadow:0 5px 0 rgba(0,0,0,.45);touch-action:none;cursor:pointer;opacity:.88}
+.pd.on{transform:translateY(4px);box-shadow:0 1px 0 rgba(0,0,0,.45);opacity:1}
+#gas{background:linear-gradient(#3bd16f,#1c9a48);width:110px;height:130px}
+.str{background:rgba(255,255,255,.25);width:92px;height:96px;font-size:30px}
+#cdown{position:absolute;left:50%;top:32%;transform:translate(-50%,-50%);font:400 72px Bungee,sans-serif;color:var(--yel);text-shadow:0 4px 0 #000;pointer-events:none}
+#msg{position:absolute;left:50%;top:18%;transform:translateX(-50%);background:rgba(10,10,14,.8);padding:6px 14px;border-radius:12px;font-weight:800;opacity:0;transition:opacity .25s;pointer-events:none;text-align:center;max-width:90%}
+#msg.show{opacity:1}
+#overlay{position:fixed;inset:0;background:rgba(10,10,14,.6);display:flex;align-items:center;justify-content:center;padding:16px;z-index:5;touch-action:auto}
+#overlay.hide{display:none}
+.card{background:#fff;color:var(--ink);border-radius:22px;padding:20px;max-width:420px;width:100%;max-height:94dvh;overflow:auto;text-align:center;border:5px solid var(--ink);box-shadow:0 0 0 4px var(--yel),0 14px 34px rgba(0,0,0,.5);-webkit-user-select:text;user-select:text}
+.card h1{font:400 38px/1 Bungee,sans-serif;margin:4px 0 8px;color:var(--red)}
+.card h2{font:400 26px/1.1 Bungee,sans-serif;margin:0 0 8px}
+.card p{margin:8px 0;color:var(--mut)}
+.flag{height:14px;margin:-6px -6px 12px;border-radius:10px;background:repeating-conic-gradient(#15161a 0 25%,#fff 0 50%) 0 0/14px 14px}
+.cta{display:block;width:100%;margin-top:10px;min-height:48px;border:0;border-radius:14px;font:400 16px Bungee,sans-serif;cursor:pointer;background:var(--red);color:#fff;box-shadow:0 4px 0 #8f1218}
+.cta.alt{background:var(--ink);box-shadow:0 4px 0 #000}
+.field{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:12px 0;text-align:left}
+.num{display:flex;align-items:center;gap:6px}
+.sb{width:44px;height:44px;border-radius:12px;border:0;background:#eceef2;font-size:20px;font-weight:800;color:var(--ink);cursor:pointer}
+.num input,.tin{height:44px;text-align:center;font:800 18px Nunito,sans-serif;border:2px solid #d5d9e0;border-radius:12px;color:var(--ink);width:64px}
+.tin{width:100%;text-align:left;padding:0 12px;font-size:16px}
+.codein{flex:1;height:48px;border:2px solid var(--ink);border-radius:12px;text-align:center;font:400 22px Bungee,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--ink)}
+.sw{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.sw button{width:36px;height:36px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 0 2px #d5d9e0;cursor:pointer}
+.sw button.sel{box-shadow:0 0 0 3px var(--ink)}
+.seg{display:flex;border-radius:12px;overflow:hidden;border:2px solid var(--ink)}
+.seg button{border:0;background:#fff;padding:0 12px;height:40px;font:800 14px Nunito,sans-serif;color:var(--ink);cursor:pointer}
+.seg button.sel{background:var(--ink);color:#fff}
+.code{font:400 44px/1 Bungee,sans-serif;letter-spacing:.12em;background:#f1f2f5;border-radius:16px;padding:14px 8px;margin:8px 0}
+.link{font-size:13px;word-break:break-all;background:#f6f7f9;border-radius:10px;padding:8px;color:var(--ink)!important}
+table{width:100%;border-collapse:collapse;margin:10px 0;text-align:left;font-size:14px}
+td{padding:7px 4px;border-bottom:1px solid #eceef2}
+td.r{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.dot{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:6px;vertical-align:-1px}
+small{color:var(--mut)}
+button:focus-visible,input:focus-visible{outline:3px solid var(--yel);outline-offset:2px}
+@media (orientation:portrait){.pd{width:80px;height:80px;font-size:13px}#gas{width:92px;height:110px}.str{width:68px;height:68px}}
+#rot{position:fixed;inset:0;z-index:8;background:#15161a;display:none;flex-direction:column;align-items:center;justify-content:center;gap:18px;text-align:center;padding:24px;font:400 20px/1.2 Bungee,sans-serif}
+#rot p{font:600 15px Nunito,sans-serif;color:#aab;margin:0;max-width:300px}
+#rot i{display:block;width:70px;height:110px;border:6px solid #fff;border-radius:14px;animation:turn 1.6s ease-in-out infinite}
+@keyframes turn{0%,20%{transform:rotate(0)}60%,100%{transform:rotate(-90deg)}}
+@media (orientation:portrait){body.racing #rot{display:flex}}
+@media (prefers-reduced-motion:reduce){#msg{transition:none}#rot i{animation:none;transform:rotate(-90deg)}}
+</style>
+</head>
+<body>
+<div id="game">
+ <canvas id="cv"></canvas>
+ <div id="hud">
+  <button class="box hb" id="menuBtn" aria-label="Pausa">II</button>
+  <div class="box"><small>VOLTA</small><span id="hLap">1/3</span></div>
+  <div class="box" id="posBox" hidden><small>POSIÇÃO</small><span id="hPos">1º</span></div>
+  <div class="box"><small>TEMPO</small><span id="hTime">0:00,0</span></div>
+  <div class="box" id="passBox"><small>PASSOU</small><span id="hPass">0</span></div>
+  <button class="box hb" id="ctrBtn" hidden><small>INCLINAÇÃO</small>Centrar</button>
+  <div class="box" id="spd"><small>KM/H</small><span id="hSpd">0</span></div>
+ </div>
+ <div id="cdown"></div>
+ <div id="msg"></div>
+ <div id="pedals">
+  <div class="grp"><button class="pd str" id="lft" aria-label="Esquerda">◀</button><button class="pd str" id="rgt" aria-label="Direita">▶</button></div>
+  <div class="grp"><button class="pd" id="gas">ACELERA</button></div>
+ </div>
+</div>
+<div id="overlay"><div class="card" id="card"></div></div>
+<div id="rot"><i></i>Gire para a horizontal<p>O Oval Turbo é jogado com o aparelho deitado. Se a tela não girar, desligue o bloqueio de rotação do aparelho.</p></div>
+
+<script>
+{
+const $=id=>document.getElementById(id);
+const cv=$('cv'),ctx=cv.getContext('2d');
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const mod=(a,m)=>((a%m)+m)%m, clamp=(v,a,b)=>Math.max(a,Math.min(b,v)), lerp=(a,b,t)=>a+(b-a)*t;
+const fmtT=t=>{const m=Math.floor(t/60),s=t-m*60;return m+':'+(s<10?'0':'')+s.toFixed(1).replace('.',',')};
+
+// ===== PISTA =====
+const SEG=200, RW=2000, CAM_H=2400, FOV=110, camDepth=1/Math.tan(FOV/2*Math.PI/180), DRAW=230, playerZ=CAM_H*camDepth;
+const MAXS=SEG*32, ACC=MAXS/4.5, BRK=-MAXS*1.2, DEC=-MAXS/4.5, OFF=MAXS/3, CENT=0.42, CARW=0.36, WALL_H=700, KMH=320;
+const PAL={light:{road:'#6e6f75',grass:'#2f9e44',apron:'#a3a4aa',out:'#3b3c42',wall:'#e2e3e7',rumble:'#e3262f'},dark:{road:'#66676d',grass:'#2a8d3d',apron:'#96979d',out:'#35363c',wall:'#cfd0d5',rumble:'#f4f4f4'}};
+let segs=[], L=0, START=0;
+const easeIn=(a,b,p)=>a+(b-a)*p*p, easeIO=(a,b,p)=>a+(b-a)*(-Math.cos(p*Math.PI)/2+.5);
+function addSeg(curve,bank,tight){const n=segs.length;segs.push({i:n,curve,bank,tight,p1:{z:n*SEG,s:{}},p2:{z:(n+1)*SEG,s:{}},c:Math.floor(n/3)%2?PAL.dark:PAL.light,f:-1})}
+function addRoad(e,h,l,c,b,t){for(let n=0;n<e;n++)addSeg(easeIn(0,c,n/e),easeIO(0,b,n/e),t);for(let n=0;n<h;n++)addSeg(c,b,t);for(let n=0;n<l;n++)addSeg(easeIO(c,0,n/l),easeIO(b,0,n/l),t)}
+// oval: reta, curvas 1-2 FECHADAS (precisa tirar o pé), reta oposta, curvas 3-4 abertas (dá de pé embaixo, com braço)
+addRoad(0,280,0,0,0);addRoad(50,120,50,-4.6,1,true);addRoad(0,280,0,0,0);addRoad(70,100,70,-2.6,1,false);
+L=segs.length*SEG; START=140*SEG;
+const segAt=z=>segs[Math.floor(mod(z,L)/SEG)];
+
+// ===== ESTADO =====
+let prefs={name:'',color:'#e3262f',num:7,steer:'',inv:false,sens:20,laps:3,best:{}};
+try{prefs=Object.assign(prefs,JSON.parse(localStorage.getItem('ovalturbo')||'{}'))}catch(e){}
+const savePrefs=()=>{try{localStorage.setItem('ovalturbo',JSON.stringify(prefs))}catch(e){}};
+const hasTilt='DeviceMotionEvent' in window&&('ontouchstart' in window||navigator.maxTouchPoints>0);
+if(!prefs.steer)prefs.steer='buttons';
+const CARCOLS=['#e3262f','#1f6fe0','#ffcc00','#22b35a','#ff7a00','#8a3ffc','#f2f2f2','#15161a'];
+let R=null, frame=0, cw=0, ch=0, bgOff=0, shake=0, sparks=0, traffic=[];
+const keys={}, btn={gas:0,lft:0,rgt:0};
+
+function rng(seed){return()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function makeTraffic(seed){
+ const r=rng(seed), cols=['#9aa3ad','#4c79c9','#f5f5f5','#2f8f6b','#c9a227','#8c5a3c','#b04a8f','#5ac8e0'], out=[];
+ for(let i=0;i<14;i++)out.push({z0:START+3000+i*(L/14)+r()*3000,x:[-0.66,0,0.66][Math.floor(r()*3)],s:MAXS*(0.32+r()*0.28),col:cols[Math.floor(r()*cols.length)],num:10+Math.floor(r()*89),prev:null});
+ return out;
+}
+const tz=c=>mod(c.z0+c.s*(R?R.t:0),L);
+
+function newRace(laps,seed,online){
+ traffic=makeTraffic(seed);
+ R={laps,seed,online,t:0,cd:3.6,run:false,dist:0,speed:0,x:online?[-0.66,0,0.66][Math.max(0,net.me)%3]:0,lapIdx:0,lapStart:0,best:null,passes:0,fin:false,steer:0};
+ if(online)R.dist=-Math.floor(Math.max(0,net.me)/3)*900;
+ tilt.sign=0; tilt.ok=false; document.body.classList.add('racing'); lockLandscape();
+ $('posBox').hidden=!online; $('passBox').hidden=!!online; $('ctrBtn').hidden=prefs.steer!=='tilt';
+ $('lft').hidden=$('rgt').hidden=prefs.steer!=='buttons';
+ hide(); wake(); sound.start();
+ tiltNoData=false;
+ if(prefs.steer==='tilt')setTimeout(()=>{if(R&&!tilt.ok&&!tiltNoData)tiltFail('O jogo não está recebendo o sensor de movimento do aparelho.')},2500);
+}
+
+// ===== INCLINAÇÃO DO APARELHO =====
+const tilt={roll:0,base:0,sign:0,ok:false};
+function onMotion(e){
+ const g=e.accelerationIncludingGravity; if(!g||g.x==null)return;
+ const ang=((screen.orientation&&screen.orientation.angle)??window.orientation??0)*Math.PI/180;
+ let sx=g.x*Math.cos(ang)-g.y*Math.sin(ang), sy=g.x*Math.sin(ang)+g.y*Math.cos(ang), sz=g.z||0;
+ if(!tilt.sign){const s=sy+sz;if(Math.abs(s)<3)return;tilt.sign=s>0?1:-1}
+ sx*=tilt.sign;sy*=tilt.sign;sz*=tilt.sign;
+ const r=Math.atan2(sx,Math.hypot(sy,sz))*180/Math.PI;
+ if(!tilt.ok){tilt.ok=true;tilt.roll=r;tilt.base=r}
+ tilt.roll=tilt.roll*0.6+r*0.4;
+}
+async function askTilt(){
+ if(prefs.steer!=='tilt')return true;
+ try{if(typeof DeviceMotionEvent!=='undefined'&&typeof DeviceMotionEvent.requestPermission==='function'){const p=await DeviceMotionEvent.requestPermission();if(p!=='granted'){tiltFail('O aparelho não liberou o sensor de movimento.');return true}}}catch(e){}
+ window.addEventListener('devicemotion',onMotion);
+ return true;
+}
+let tiltNoData=false;
+function tiltFail(why){
+ tiltNoData=true; $('lft').hidden=$('rgt').hidden=false; $('ctrBtn').hidden=true;
+ card(`<h2>Inclinação indisponível</h2><p>${why}</p><p>Isso acontece quando o jogo é aberto dentro de outro app (como aqui no Claude), que bloqueia o sensor. Abra pelo link do jogo no navegador (Safari ou Chrome) ou instalado na tela inicial.</p><p>Por enquanto, use os botões ◀ ▶.</p><button class="cta" id="ok">Entendi</button>`);
+ $('ok').onclick=hide;
+}
+function centerTilt(){tilt.base=tilt.roll;say('Volante centralizado')}
+
+// ===== FÍSICA =====
+function steerInput(){
+ let s=0;
+ if(keys.ArrowLeft||keys.KeyA||btn.lft)s-=1;
+ if(keys.ArrowRight||keys.KeyD||btn.rgt)s+=1;
+ if(!s&&prefs.steer==='tilt'&&tilt.ok){let d=-(tilt.roll-tilt.base)*(prefs.inv?-1:1);d=Math.abs(d)<2?0:d-Math.sign(d)*2;s=clamp(d/(prefs.sens||20),-1,1)}
+ return s;
+}
+function update(dt){
+ if(!R)return;
+ bgOff+=0; shake=Math.max(0,shake-dt*3); sparks=Math.max(0,sparks-dt*4);
+ if(!R.run){
+  if(R.cd>0){R.cd-=dt;if(R.cd<=0){R.run=true;R.lapStart=0;beep(880,.35);if(prefs.steer==='tilt'&&tilt.ok)tilt.base=tilt.roll}}
+  return;
+ }
+ R.t+=dt;
+ const P=mod(START+R.dist,L), seg=segAt(P), sp=R.speed/MAXS, dx=dt*2*sp;
+ const gas=keys.ArrowUp||keys.KeyW||keys.Space||btn.gas, brk=keys.ArrowDown||keys.KeyS;
+ R.steer=R.fin?0:steerInput();
+ // força centrífuga cresce com o quadrado da velocidade; a inclinação ajuda, mas não resolve sozinha
+ R.x+=dx*R.steer;
+ R.x-=dx*sp*seg.curve*CENT*(1-0.35*seg.bank);
+ if(R.x>-1&&R.x<1)R.x-=dt*0.35*seg.bank*Math.max(0,0.5-sp);
+ bgOff+=seg.curve*sp*dt*0.6;
+ if(R.fin)R.speed+=DEC*1.5*dt;
+ else if(brk)R.speed+=BRK*dt;
+ else if(gas)R.speed+=ACC*dt*(1-0.55*sp);
+ else R.speed+=DEC*dt;
+ if(R.x<-1.12&&R.speed>OFF)R.speed=Math.max(OFF,R.speed-MAXS*1.1*dt);
+ if(R.x>0.98){R.x=0.9;if(R.speed>MAXS*0.2){R.speed*=0.25;sparks=1;shake=1;beep(120,.25,'square');say('No muro! Tire o pé antes da curva.')}}
+ R.x=Math.max(R.x,-1.7);
+ R.speed=clamp(R.speed,0,MAXS);
+ R.dist+=R.speed*dt;
+ // batidas na traseira e ultrapassagens
+ const P2=mod(START+R.dist,L);
+ for(const c of traffic){
+  const z=tz(c), rel=mod(z-P2,L), srel=rel>L/2?rel-L:rel;
+  if(rel<360&&Math.abs(c.x-R.x)<CARW*0.92&&R.speed>c.s){R.dist-=360-rel;R.speed=c.s*0.72;shake=1;beep(90,.18,'sawtooth')}
+  if(c.prev!=null&&c.prev>0&&srel<=0&&c.prev<3000&&R.dist>0&&!R.fin)R.passes++;
+  c.prev=srel;
+ }
+ const li=Math.floor(R.dist/L);
+ if(R.dist>0&&li>R.lapIdx&&!R.fin){
+  const lt=R.t-R.lapStart; R.lapStart=R.t; R.lapIdx=li;
+  const rec=R.best==null||lt<R.best; if(rec)R.best=lt;
+  if(li>=R.laps)finishRace();
+  else{say((li===R.laps-1?'ÚLTIMA VOLTA! ':'Volta ')+fmtT(lt)+(rec&&li>1?' · melhor volta':''));beep(660,.12)}
+ }
+ if(R.online)netTick(dt);
+}
+
+// ===== DESENHO =====
+// cambagem: nas curvas, a borda de fora da pista (direita) fica mais alta que a de dentro
+const BANK_H=1500;
+const groundAt=(bank,x)=>bank*BANK_H*(clamp(x,-1,1)+1)/2;
+function project(p,camX,camY,camZ,bank){
+ const cz=p.z-camZ; p.s.scale=camDepth/cz;
+ p.s.x=cw/2+p.s.scale*(-camX)*cw/2; p.s.w=p.s.scale*RW*cw/2;
+ p.s.y0=ch/2-p.s.scale*(0-camY)*ch/2;
+ p.s.yb=ch/2-p.s.scale*(bank*BANK_H-camY)*ch/2;
+}
+const ptY=(p,k)=>k<=-1?p.y0:k>=1?p.yb:lerp(p.y0,p.yb,(k+1)/2);
+function band(p1,p2,ka,kb,col){poly(p1.x+p1.w*ka,ptY(p1,ka),p1.x+p1.w*kb,ptY(p1,kb),p2.x+p2.w*kb,ptY(p2,kb),p2.x+p2.w*ka,ptY(p2,ka),col)}
+function poly(a,b,c,d,e,f,g,h,col){ctx.fillStyle=col;ctx.beginPath();ctx.moveTo(a,b);ctx.lineTo(c,d);ctx.lineTo(e,f);ctx.lineTo(g,h);ctx.closePath();ctx.fill()}
+function drawSeg(s,p1,p2){
+ const c=s.c;
+ poly(-cw,p1.y0,p1.x-p1.w,p1.y0,p2.x-p2.w,p2.y0,-cw,p2.y0,c.grass);
+ {const hz=ch/2,y1=Math.max(p1.yb,hz),y2=Math.max(p2.yb,hz);if(y1>y2)poly(p1.x+p1.w,y1,2*cw,y1,2*cw,y2,p2.x+p2.w,y2,c.out)}
+ band(p1,p2,-1.3,-1,c.apron);
+ band(p1,p2,-1.08,-1,c.rumble);
+ poly(p1.x-p1.w,p1.y0,p1.x+p1.w,p1.yb,p2.x+p2.w,p2.yb,p2.x-p2.w,p2.y0,c.road);
+ band(p1,p2,0.96,1,'#f4f4f4');
+ if(c===PAL.light)for(const k of[-1/3,1/3])band(p1,p2,k-0.018,k+0.018,'#f0f0f0');
+ if(s.i===140||s.i===141){const n=10;for(let k=0;k<n;k++)band(p1,p2,-1+2*k/n,-1+2*(k+1)/n,(k+s.i)%2?'#111':'#fff')}
+ const h1=p1.scale*WALL_H*cw/2,h2=p2.scale*WALL_H*cw/2,wx1=p1.x+p1.w,wx2=p2.x+p2.w,t=s.tight?1.3:1.12;
+ poly(wx1,p1.yb,wx2,p2.yb,wx2,p2.yb-h2,wx1,p1.yb-h1,c.wall);
+ poly(wx1,p1.yb-h1,wx2,p2.yb-h2,wx2,p2.yb-h2*t,wx1,p1.yb-h1*t,s.tight?(c===PAL.light?'#ffcc00':'#15161a'):(c===PAL.light?'#2b62c4':'#e3262f'));
+}
+function drawCar(x,yb,w,col,num,brake,lean){
+ if(w<2)return;
+ const h=w*0.56;
+ ctx.fillStyle='rgba(0,0,0,.35)';ctx.beginPath();ctx.ellipse(x,yb,w*0.55,h*0.12,0,0,7);ctx.fill();
+ ctx.fillStyle='#111';ctx.fillRect(x-w*0.52,yb-h*0.42,w*0.2,h*0.42);ctx.fillRect(x+w*0.32,yb-h*0.42,w*0.2,h*0.42);
+ ctx.fillStyle=col;ctx.beginPath();ctx.roundRect?ctx.roundRect(x-w*0.46+lean,yb-h*0.95,w*0.92,h*0.72,w*0.08):ctx.rect(x-w*0.46,yb-h*0.95,w*0.92,h*0.72);ctx.fill();
+ ctx.fillStyle='rgba(0,0,0,.18)';ctx.fillRect(x-w*0.46+lean,yb-h*0.4,w*0.92,h*0.17);
+ ctx.fillStyle=col;ctx.beginPath();ctx.roundRect?ctx.roundRect(x-w*0.29+lean*1.4,yb-h*1.2,w*0.58,h*0.34,w*0.06):ctx.rect(x-w*0.29,yb-h*1.2,w*0.58,h*0.34);ctx.fill();
+ ctx.fillStyle='#1d2b3a';ctx.fillRect(x-w*0.23+lean*1.4,yb-h*1.13,w*0.46,h*0.22);
+ ctx.fillStyle='#1a1a1a';ctx.fillRect(x-w*0.52+lean,yb-h*1.02,w*1.04,h*0.09);
+ ctx.fillStyle=brake?'#ff2a2a':'#a31515';ctx.fillRect(x-w*0.42+lean,yb-h*0.78,w*0.16,h*0.12);ctx.fillRect(x+w*0.26+lean,yb-h*0.78,w*0.16,h*0.12);
+ if(w>26&&num!=null){ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(x+lean,yb-h*0.68,h*0.17,0,7);ctx.fill();ctx.fillStyle='#111';ctx.font=`900 ${Math.round(h*0.22)}px Nunito,sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(num,x+lean,yb-h*0.67)}
+}
+function tiltCar(x,yb,w,ang,col,num,brake,lean){ctx.save();ctx.translate(x,yb);ctx.rotate(ang);drawCar(0,0,w,col,num,brake,lean);ctx.restore()}
+const CLOUDS=[[0.08,0.10,1.1],[0.3,0.2,0.8],[0.52,0.07,1.3],[0.7,0.24,0.9],[0.9,0.13,1.0],[1.15,0.18,0.7]];
+let cloudT=0;
+function render(){
+ frame++;
+ const dist=R?R.dist:0, px=R?R.x:0;
+ const pos=mod(START+dist-playerZ,L), base=segAt(pos), bp=mod(pos,SEG)/SEG, pseg=segAt(pos+playerZ);
+ const pp=mod(pos+playerZ,SEG)/SEG, nseg=segs[(pseg.i+1)%segs.length], bank=lerp(pseg.bank,nseg.bank,pp);
+ const camY=CAM_H+groundAt(bank,px);
+ ctx.save();
+ const sh=shake*6; if(sh)ctx.translate((Math.random()-.5)*sh,(Math.random()-.5)*sh);
+ // só o céu, com nuvens discretas que deslizam devagar
+ const sky=ctx.createLinearGradient(0,0,0,ch/2);sky.addColorStop(0,'#2f6fc4');sky.addColorStop(1,'#bfe0ff');ctx.fillStyle=sky;ctx.fillRect(-20,-20,cw+40,ch/2+22);
+ ctx.fillStyle='rgba(255,255,255,.55)';
+ for(const c of CLOUDS){
+  const span=cw*1.4, x=mod(c[0]*span-bgOff*cw*0.35-cloudT*6,span)-cw*0.2, y=c[1]*ch, r=Math.min(cw,ch)*0.05*c[2];
+  ctx.beginPath();ctx.ellipse(x,y,r*2.2,r*0.7,0,0,7);ctx.ellipse(x+r*1.2,y-r*0.35,r*1.3,r*0.65,0,0,7);ctx.ellipse(x-r*1.1,y-r*0.2,r*1.1,r*0.5,0,0,7);ctx.fill();
+ }
+ // pista: projeta tudo e desenha do fundo para a frente
+ let x=0,dx=-(base.curve*bp); const vis=[];
+ for(let n=0;n<DRAW;n++){
+  const s=segs[(base.i+n)%segs.length], s2=segs[(s.i+1)%segs.length], looped=s.i<base.i, cz=pos-(looped?L:0);
+  project(s.p1,px*RW-x,camY,cz,s.bank); project(s.p2,px*RW-x-dx,camY,cz,s2.bank);
+  x+=dx; dx+=s.curve; s.f=-1;
+  if(s.p1.z-cz<=camDepth||s.p2.s.y0>=s.p1.s.y0)continue;
+  vis.push(s); s.f=frame;
+ }
+ for(let k=vis.length-1;k>=0;k--)drawSeg(vis[k],vis[k].p1.s,vis[k].p2.s);
+ // carros, do mais longe para o mais perto, apoiados na pista inclinada
+ const objs=[];
+ for(const c of traffic)objs.push({z:tz(c),x:c.x,col:c.col,num:c.num});
+ if(R&&R.online)for(const o of others())objs.push(o);
+ objs.forEach(o=>o.rel=mod(o.z-pos,L));
+ objs.sort((a,b)=>b.rel-a.rel);
+ for(const o of objs){
+  if(o.rel<playerZ*0.6||o.rel>DRAW*SEG)continue;
+  const s=segAt(o.z); if(s.f!==frame)continue;
+  const t=mod(o.z,SEG)/SEG, a=s.p1.s, b=s.p2.s;
+  const sc=lerp(a.scale,b.scale,t), sx=lerp(a.x,b.x,t), w0=lerp(a.w,b.w,t);
+  const y0=lerp(a.y0,b.y0,t), yb=lerp(a.yb,b.yb,t);
+  const w=sc*CARW*RW*cw/2, cx=sx+sc*o.x*RW*cw/2, cy=lerp(y0,yb,(clamp(o.x,-1,1)+1)/2);
+  tiltCar(cx,cy,w,Math.atan2(yb-y0,2*w0),o.col,o.num,false,0);
+  if(o.name&&w>14){ctx.font='800 13px Nunito,sans-serif';ctx.textAlign='center';ctx.textBaseline='alphabetic';const tw=ctx.measureText(o.name).width+10;ctx.fillStyle='rgba(0,0,0,.6)';ctx.fillRect(cx-tw/2,cy-w*0.85-18,tw,17);ctx.fillStyle='#fff';ctx.fillText(o.name,cx,cy-w*0.85-5)}
+ }
+ // seu carro, inclinado junto com a pista
+ const brk=keys.ArrowDown||keys.KeyS||(R&&R.run&&!btn.gas&&!keys.ArrowUp&&!keys.KeyW&&!keys.Space), pw=CARW*RW/CAM_H*cw/2;
+ const pang=px>=-1&&px<=1?-Math.atan2(bank*BANK_H,2*RW):0;
+ tiltCar(cw/2,ch-4,pw,pang,prefs.color,prefs.num,brk,(R?R.steer:0)*pw*0.04);
+ if(sparks>0){ctx.fillStyle='#ffd23a';for(let i=0;i<8;i++)ctx.fillRect(cw/2+pw*0.5+Math.random()*pw*0.3,ch-pw*0.5-Math.random()*pw*0.3,3,3)}
+ ctx.restore();
+}
+
+// ===== HUD, ÁUDIO, LOOP =====
+let hudT=0;
+function hud(dt){
+ hudT+=dt; if(hudT<0.08||!R)return; hudT=0;
+ $('hSpd').textContent=Math.round(R.speed/MAXS*KMH);
+ $('hLap').textContent=Math.min(R.laps,Math.max(1,R.lapIdx+1))+'/'+R.laps;
+ $('hTime').textContent=fmtT(R.t);
+ $('hPass').textContent=R.passes;
+ if(R.online)$('hPos').textContent=myPos()+'º/'+lobby.players.filter(p=>p.on).length;
+ const cd=$('cdown');
+ cd.textContent=!R.run&&R.cd>0?(R.cd>3?'':Math.ceil(R.cd)):(R.run&&R.t<0.8?'VAI!':'');
+ if(!R.run&&R.cd>0&&R.cd<=3&&Math.ceil(R.cd)!==hud.lastC){hud.lastC=Math.ceil(R.cd);beep(440,.15)}
+}
+let actx,eng,engG;
+const sound={start(){try{actx=actx||new(window.AudioContext||window.webkitAudioContext)();actx.resume&&actx.resume();if(!eng){eng=actx.createOscillator();engG=actx.createGain();eng.type='sawtooth';engG.gain.value=0;const f=actx.createBiquadFilter();f.type='lowpass';f.frequency.value=600;eng.connect(f).connect(engG).connect(actx.destination);eng.start()}}catch(e){}},
+ set(sp){if(!eng)return;eng.frequency.setTargetAtTime(55+sp*190,actx.currentTime,.05);engG.gain.setTargetAtTime(R&&R.run?0.035+sp*0.03:0.02,actx.currentTime,.1)},
+ stop(){if(engG)engG.gain.setTargetAtTime(0,actx.currentTime,.1)}};
+function beep(f,d,type='triangle'){try{if(!actx)return;const o=actx.createOscillator(),g=actx.createGain();o.type=type;o.frequency.value=f;g.gain.setValueAtTime(.14,actx.currentTime);g.gain.exponentialRampToValueAtTime(.001,actx.currentTime+d);o.connect(g).connect(actx.destination);o.start();o.stop(actx.currentTime+d)}catch(e){}}
+function unlock(){document.body.classList.remove('racing');try{screen.orientation.unlock()}catch(e){}try{document.fullscreenElement&&document.exitFullscreen()}catch(e){}}
+async function lockLandscape(){
+ try{const d=document.documentElement;if(!document.fullscreenElement&&d.requestFullscreen&&matchMedia('(pointer:coarse)').matches)await d.requestFullscreen({navigationUI:'hide'})}catch(e){}
+ try{await screen.orientation.lock('landscape')}catch(e){}
+}
+const portrait=()=>matchMedia('(orientation:portrait)').matches&&document.body.classList.contains('racing');
+let wl=null; async function wake(){try{wl=await navigator.wakeLock.request('screen')}catch(e){}}
+let msgT; function say(m){const e=$('msg');e.textContent=m;e.classList.add('show');clearTimeout(msgT);msgT=setTimeout(()=>e.classList.remove('show'),2200)}
+function resize(){const d=Math.min(2,devicePixelRatio||1);cw=innerWidth;ch=innerHeight;cv.width=cw*d;cv.height=ch*d;ctx.setTransform(d,0,0,d,0,0)}
+let last=0, paused=false;
+function loop(t){
+ const dt=Math.min(.05,(t-last)/1000||0);last=t;
+ if(!paused&&!(portrait()&&R&&!R.online))update(dt); cloudT+=dt;
+ render(); hud(dt); if(R)sound.set(R.speed/MAXS);
+ requestAnimationFrame(loop);
+}
+
+// ===== TELAS =====
+function card(h){$('card').innerHTML='<div class="flag"></div>'+h;$('overlay').classList.remove('hide')}
+function hide(){$('overlay').classList.add('hide')}
+function stepper(id,v){return `<div class="num"><button class="sb" id="${id}M" aria-label="Diminuir">−</button><input id="${id}I" type="number" inputmode="numeric" min="1" max="100" value="${v}"><button class="sb" id="${id}P" aria-label="Aumentar">+</button></div>`}
+function bindLaps(get,set){
+ const S=v=>{set(clamp(Math.round(v)||1,1,100));$('lI').value=get()};
+ $('lM').onclick=()=>S(get()-1);$('lP').onclick=()=>S(get()+1);$('lI').onchange=e=>S(+e.target.value);
+ $('lR').onclick=()=>{S(1+Math.floor(Math.random()*10));say('Sorteado: '+get()+' volta'+(get()>1?'s':''))};
+}
+function carFields(){
+ return `<div class="field"><b>Cor do carro</b><div class="sw">${CARCOLS.map(c=>`<button data-c="${c}" style="background:${c}" class="${c===prefs.color?'sel':''}" aria-label="Cor"></button>`).join('')}</div></div>
+ <div class="field"><b>Número</b>${stepper('n',prefs.num)}</div>
+ <div class="field"><b>Direção</b><div class="seg"><button id="sB" class="${prefs.steer==='buttons'?'sel':''}">Botões</button><button id="sT" class="${prefs.steer==='tilt'?'sel':''}">Inclinar</button></div></div>
+ <div class="field tiltRow" ${prefs.steer==='tilt'?'':'hidden'}><b>Sensibilidade</b><div class="seg">${[[30,'Baixa'],[20,'Média'],[12,'Alta']].map(([v,t])=>`<button data-s="${v}" class="${prefs.sens===v?'sel':''}">${t}</button>`).join('')}</div></div>
+ <div class="field tiltRow" ${prefs.steer==='tilt'?'':'hidden'}><b>Inverter inclinação</b><div class="seg"><button id="iN" class="${prefs.inv?'':'sel'}">Não</button><button id="iS" class="${prefs.inv?'sel':''}">Sim</button></div></div>`;
+}
+function bindCar(){
+ document.querySelectorAll('.sw button').forEach(b=>b.onclick=()=>{prefs.color=b.dataset.c;savePrefs();document.querySelectorAll('.sw button').forEach(x=>x.classList.toggle('sel',x===b))});
+ const N=v=>{prefs.num=clamp(Math.round(v)||1,1,99);$('nI').value=prefs.num;savePrefs()};
+ $('nM').onclick=()=>N(prefs.num-1);$('nP').onclick=()=>N(prefs.num+1);$('nI').onchange=e=>N(+e.target.value);
+ const st=m=>{prefs.steer=m;savePrefs();$('sT').classList.toggle('sel',m==='tilt');$('sB').classList.toggle('sel',m==='buttons');document.querySelectorAll('.tiltRow').forEach(r=>r.hidden=m!=='tilt')};
+ document.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>{prefs.sens=+b.dataset.s;savePrefs();document.querySelectorAll('[data-s]').forEach(x=>x.classList.toggle('sel',x===b))});
+ $('sT').onclick=()=>st('tilt');$('sB').onclick=()=>st('buttons');
+ const iv=v=>{prefs.inv=v;savePrefs();$('iN').classList.toggle('sel',!v);$('iS').classList.toggle('sel',v)};
+ $('iN').onclick=()=>iv(false);$('iS').onclick=()=>iv(true);
+}
+function menu(){
+ if(R&&R.online&&net.on){card(`<h2>PAUSA</h2><p>Corrida online na sala <b>${net.code}</b>. O jogo continua para os outros.</p><button class="cta" id="bk">Voltar à pista</button><button class="cta alt" id="lv">Sair da sala</button>`);$('bk').onclick=hide;$('lv').onclick=leave;return}
+ paused=!!R; sound.stop();
+ card(`<h1>OVAL TURBO</h1><p>Corrida no oval com curvas inclinadas. Um dedo no acelerador, o outro na direção. Nas curvas 1 e 2 (muro amarelo e preto) é preciso dosar o acelerador para não ir para o muro. Desvie dos carros mais lentos: bater na traseira faz perder velocidade.</p>
+ ${R&&!R.fin&&!R.online?'<button class="cta" id="rs">Continuar corrida</button>':''}
+ <button class="cta${R&&!R.fin&&!R.online?' alt':''}" id="on">Online · corrida com a galera</button>
+ <button class="cta alt" id="so">Solo · contra o relógio</button>
+ <a class="cta alt" href="../" style="text-decoration:none;line-height:48px">← Trocar de jogo</a>`);
+ if($('rs'))$('rs').onclick=()=>{paused=false;hide();sound.start()};
+ $('on').onclick=()=>{paused=false;onlineMenu()};
+ $('so').onclick=()=>{paused=false;soloSetup()};
+}
+function soloSetup(){
+ card(`<h2>SOLO</h2><p>Faça o melhor tempo e ultrapasse o máximo de carros.</p>
+ <div class="field"><b>Voltas</b>${stepper('l',prefs.laps)}</div>
+ <button class="cta alt" id="lR" style="margin-top:0">Sortear voltas</button>
+ ${carFields()}
+ <button class="cta" id="go">Largar</button><button class="cta alt" id="bk">Voltar</button>`);
+ bindLaps(()=>prefs.laps,v=>{prefs.laps=v;savePrefs()}); bindCar();
+ $('go').onclick=async()=>{sound.start();lockLandscape();await askTilt();newRace(prefs.laps,Date.now()%100000,false)};
+ $('bk').onclick=menu;
+}
+function finishRace(){
+ R.fin=true; beep(988,.25);setTimeout(()=>beep(1318,.4),180);
+ if(R.online){netFinish();return}
+ const k=String(R.laps), old=prefs.best[k], rec=old==null||R.t<old; if(rec){prefs.best[k]=R.t;savePrefs()}
+ setTimeout(()=>{card(`<h2>BANDEIRADA!</h2><p>${R.laps} volta${R.laps>1?'s':''}</p>
+ <table><tbody><tr><td>Tempo total</td><td class="r"><b>${fmtT(R.t)}</b></td></tr><tr><td>Melhor volta</td><td class="r">${R.best!=null?fmtT(R.best):'—'}</td></tr><tr><td>Ultrapassagens</td><td class="r">${R.passes}</td></tr><tr><td>Recorde (${R.laps} volta${R.laps>1?'s':''})</td><td class="r">${fmtT(prefs.best[k])}${rec?' · novo!':''}</td></tr></tbody></table>
+ <button class="cta" id="ag">Correr de novo</button><button class="cta alt" id="mn">Menu</button>`);
+ $('ag').onclick=()=>newRace(R.laps,Date.now()%100000,false);$('mn').onclick=()=>{R=null;unlock();menu()}},1500);
+}
+
+// ===== ONLINE (conexão direta entre aparelhos, sem conta) =====
+const net={on:false,host:false,peer:null,conns:new Map(),hostConn:null,me:-1,code:'',sendT:0};
+let lobby={laps:3,players:[],started:false,seed:0}, posts=[];
+const CODE_CH='ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+const genCode=()=>Array.from({length:5},()=>CODE_CH[Math.floor(Math.random()*CODE_CH.length)]).join('');
+const peerId=c=>'ovalturbo-v1-'+c.toLowerCase();
+const roomLink=()=>location.origin+location.pathname+'#sala-'+net.code;
+function loadPeer(){
+ if(window.Peer)return Promise.resolve();
+ const add=src=>new Promise((ok,ko)=>{const s=document.createElement('script');s.src=src;s.onload=ok;s.onerror=ko;document.head.appendChild(s)});
+ return add('https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js').catch(()=>add('https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js'));
+}
+function resetNet(){try{net.peer&&net.peer.destroy()}catch(e){}Object.assign(net,{on:false,host:false,peer:null,conns:new Map(),hostConn:null,me:-1,code:''});lobby={laps:prefs.laps,players:[],started:false,seed:0};posts=[]}
+function onlineMenu(code=''){
+ card(`<h2>ONLINE</h2><p>Cada um corre no próprio aparelho. Uma pessoa cria a sala e os outros entram com o código.</p>
+ <div class="field"><b>Seu nome</b><input id="myName" class="tin" style="max-width:60%" maxlength="14" placeholder="Nome" value="${esc(prefs.name||'')}"></div>
+ ${carFields()}
+ <button class="cta" id="host">Criar sala</button>
+ <div class="field" style="margin-top:16px"><input id="roomCode" class="codein" maxlength="5" placeholder="CÓDIGO" value="${esc(code)}" autocapitalize="characters" aria-label="Código da sala"><button class="cta alt" id="join" style="margin:0;width:auto;padding:0 18px">Entrar</button></div>
+ <button class="cta alt" id="bk">Voltar</button>`);
+ bindCar();
+ const nm=()=>{const v=$('myName').value.trim();if(!v){say('Digite seu nome primeiro.');$('myName').focus();return''}prefs.name=v;savePrefs();return v};
+ $('host').onclick=()=>{const v=nm();if(v){sound.start();lockLandscape();askTilt();hostRoom()}};
+ $('join').onclick=()=>{const v=nm();if(!v)return;const c=$('roomCode').value.trim().toUpperCase();if(c.length!==5){say('O código tem 5 letras/números.');return}sound.start();lockLandscape();askTilt();joinRoom(c)};
+ $('bk').onclick=menu;
+}
+const me=()=>({name:prefs.name,color:prefs.color,num:prefs.num});
+function netError(m){resetNet();R=null;card(`<h2>Ops!</h2><p>${m}</p><button class="cta" id="ok">Voltar</button>`);$('ok').onclick=()=>onlineMenu()}
+function leave(){unlock();if(net.host)bcast({t:'bye'});resetNet();R=null;sound.stop();history.replaceState(null,'',location.pathname);menu()}
+function connecting(m){card(`<h2>Conectando…</h2><p>${m}</p><button class="cta alt" id="cx">Cancelar</button>`);$('cx').onclick=()=>{resetNet();onlineMenu()}}
+function lobbyCard(){
+ const ps=lobby.players, n=ps.filter(p=>p.on).length;
+ card(`<h2>SALA</h2><div class="code">${net.code}</div>
+ ${net.host?`<p>Mande o código ou o link para a galera:</p><p class="link">${esc(roomLink())}</p><button class="cta alt" id="cp">Copiar link</button>`:'<p>Você entrou! Aguardando o anfitrião dar a largada.</p>'}
+ <table><tbody>${ps.map((p,i)=>`<tr><td><span class="dot" style="background:${p.color}"></span><b>${esc(p.name)}</b> <small>#${p.num}${i===net.me?' · você':''}${i===0?' · anfitrião':''}${p.on?'':' · fora'}</small></td></tr>`).join('')}</tbody></table>
+ <div class="field"><b>Voltas</b>${net.host?stepper('l',lobby.laps):`<b>${lobby.laps}</b>`}</div>
+ ${net.host?`<button class="cta alt" id="lR" style="margin-top:0">Sortear voltas</button><button class="cta" id="st">Largada! (${n} piloto${n>1?'s':''})</button>`:''}
+ <button class="cta alt" id="lv">Sair</button>`);
+ $('lv').onclick=leave;
+ if(!net.host)return;
+ $('cp').onclick=()=>{try{navigator.clipboard.writeText(roomLink()).then(()=>say('Link copiado!'),()=>say('Copie o link acima.'))}catch(e){say('Copie o link acima.')}};
+ bindLaps(()=>lobby.laps,v=>{lobby.laps=v;prefs.laps=v;savePrefs();sendLobby()});
+ $('st').onclick=hostStart;
+}
+function bcast(m){for(const {c} of net.conns.values())if(c.open)try{c.send(m)}catch(e){}}
+function sendLobby(){bcast({t:'lobby',lobby});onLobby({lobby})}
+async function hostRoom(){
+ resetNet(); connecting('Criando a sala.');
+ try{await loadPeer()}catch(e){return netError('Não consegui carregar a conexão online. Verifique a internet.')}
+ net.host=true; net.code=genCode();
+ const peer=new Peer(peerId(net.code)); net.peer=peer;
+ peer.on('open',()=>{net.on=true;net.me=0;lobby.players=[{...me(),pid:'host',on:1,d:0,x:0,sp:0,fin:0,time:0}];lobbyCard()});
+ peer.on('error',e=>{if(e.type==='unavailable-id'){peer.destroy();hostRoom()}else if(e.type!=='peer-unavailable')netError('Problema na conexão ('+e.type+').')});
+ peer.on('disconnected',()=>{try{peer.reconnect()}catch(e){}});
+ peer.on('connection',c=>{c.on('data',d=>hostData(c,d));c.on('close',()=>hostDrop(c))});
+}
+function hostData(c,d){
+ const ps=lobby.players;
+ if(d.t==='hello'){
+  let nm=String(d.name||'Piloto').slice(0,14), i=ps.findIndex(p=>!p.on&&p.name===nm);
+  if(i<0){let b=nm,k=2;while(ps.some(p=>p.name===nm))nm=b+' '+k++;i=ps.length;ps.push({name:nm,color:d.color,num:d.num,pid:c.peer,on:1,d:0,x:0,sp:0,fin:0,time:0})}
+  else Object.assign(ps[i],{on:1,pid:c.peer,color:d.color,num:d.num});
+  net.conns.set(c.peer,{c,i}); c.send({t:'welcome',me:i,code:net.code});
+  say(nm+' entrou na sala'); sendLobby();
+  if(lobby.started)c.send({t:'go',lobby,late:1});
+ } else if(d.t==='pos'){const e=net.conns.get(c.peer);if(e)Object.assign(ps[e.i],{d:d.d,x:d.x,sp:d.sp})}
+ else if(d.t==='fin'){const e=net.conns.get(c.peer);if(e)recordFin(e.i,d.time)}
+}
+function hostDrop(c){const e=net.conns.get(c.peer);if(!e)return;net.conns.delete(c.peer);lobby.players[e.i].on=0;say(lobby.players[e.i].name+' saiu');sendLobby()}
+function hostStart(){
+ lobby.players=lobby.players.filter((p,i)=>p.on||i===0);
+ for(const [k,o] of net.conns){o.i=lobby.players.findIndex(p=>p.pid===k);try{o.c.send({t:'welcome',me:o.i,code:net.code})}catch(e){}}
+ lobby.players.forEach(p=>Object.assign(p,{d:0,x:0,sp:0,fin:0,time:0}));
+ lobby.started=true; lobby.seed=Math.floor(Math.random()*1e6);
+ const m={t:'go',lobby}; bcast(m); onGo(m);
+}
+function recordFin(i,time){
+ const p=lobby.players[i]; if(p.fin)return;
+ p.fin=1+lobby.players.filter(q=>q.fin).length; p.time=time;
+ const m={t:'res',players:lobby.players}; bcast(m); onRes(m);
+}
+async function joinRoom(code){
+ resetNet(); connecting('Entrando na sala '+code+'.');
+ try{await loadPeer()}catch(e){return netError('Não consegui carregar a conexão online. Verifique a internet.')}
+ net.code=code;
+ const peer=new Peer(); net.peer=peer;
+ peer.on('open',()=>{
+  const c=peer.connect(peerId(code),{reliable:true,serialization:'json'}); net.hostConn=c;
+  const to=setTimeout(()=>{if(!c.open)netError('Não consegui chegar na sala '+code+'. Confira o código ou peça para o anfitrião manter o jogo aberto.')},12000);
+  c.on('open',()=>{clearTimeout(to);c.send({t:'hello',...me()})});
+  c.on('data',d=>{
+   if(d.t==='welcome'){net.me=d.me;net.on=true}
+   else if(d.t==='lobby')onLobby(d);
+   else if(d.t==='go')onGo(d);
+   else if(d.t==='pos')onPos(d);
+   else if(d.t==='res')onRes(d);
+   else if(d.t==='bye'){net.on=false;netError('O anfitrião encerrou a sala.')}
+  });
+  c.on('close',()=>{if(net.on)netError('A conexão com a sala caiu. O anfitrião saiu ou a internet oscilou.')});
+ });
+ peer.on('error',e=>netError(e.type==='peer-unavailable'?'A sala '+code+' não existe. Confira o código.':'Problema na conexão ('+e.type+').'));
+}
+function onLobby(d){const was=lobby.started;lobby=d.lobby;if(!lobby.started&&(!R||R.fin||!R.online))lobbyCard();else if(was&&!lobby.started){R=null;lobbyCard()}}
+function onGo(d){lobby=d.lobby;posts=lobby.players.map(()=>({d:0,x:0,sp:0,at:performance.now()}));newRace(lobby.laps,lobby.seed,true);if(d.late)R.cd=0.01}
+function onPos(d){const now=performance.now();d.a.forEach((q,i)=>{if(!posts[i])posts[i]={};Object.assign(posts[i],{d:q[0],x:q[1],sp:q[2],at:now})})}
+function netTick(dt){
+ net.sendT+=dt; if(net.sendT<0.1)return; net.sendT=0;
+ const mine={d:R.dist,x:R.x,sp:R.speed};
+ if(net.host){
+  Object.assign(lobby.players[0],mine);
+  const m={t:'pos',a:lobby.players.map(p=>[Math.round(p.d),+p.x.toFixed(3),Math.round(p.sp)])};
+  bcast(m); onPos(m);
+ } else if(net.hostConn&&net.hostConn.open)net.hostConn.send({t:'pos',d:Math.round(mine.d),x:+mine.x.toFixed(3),sp:Math.round(mine.sp)});
+}
+function others(){
+ const now=performance.now(),out=[];
+ posts.forEach((q,i)=>{
+  if(i===net.me||!q||q.at==null)return;const p=lobby.players[i];if(!p||!p.on)return;
+  const d=q.d+q.sp*Math.min(0.5,(now-q.at)/1000);
+  out.push({z:mod(START+d,L),x:q.x,col:p.color,num:p.num,name:p.name});
+ });
+ return out;
+}
+function myPos(){
+ let pos=1; const myD=R.dist;
+ lobby.players.forEach((p,i)=>{if(i===net.me||!p.on)return;const q=posts[i];if(p.fin&&!R.fin)pos++;else if(q&&!p.fin&&q.d>myD&&!R.fin)pos++;});
+ if(R.fin){const f=lobby.players[net.me]&&lobby.players[net.me].fin;return f||pos}
+ return pos;
+}
+function netFinish(){
+ if(net.host)recordFin(0,R.t);else net.hostConn&&net.hostConn.send({t:'fin',time:R.t});
+ setTimeout(()=>{if(R&&R.fin)resultsCard()},1200);
+}
+function onRes(d){lobby.players=d.players;if(R&&R.fin&&!$('overlay').classList.contains('hide'))resultsCard()}
+function resultsCard(){
+ const ps=lobby.players.map((p,i)=>({p,i}));
+ ps.sort((a,b)=>(a.p.fin||999)-(b.p.fin||999)||((posts[b.i]||{}).d||0)-((posts[a.i]||{}).d||0));
+ const all=lobby.players.every(p=>p.fin||!p.on);
+ card(`<h2>${all?'RESULTADO FINAL':'BANDEIRADA!'}</h2><p>${lobby.laps} volta${lobby.laps>1?'s':''}${R.best!=null?' · sua melhor volta '+fmtT(R.best):''}</p>
+ <table><tbody>${ps.map(({p,i},k)=>`<tr><td>${p.fin?p.fin+'º':'—'}</td><td><span class="dot" style="background:${p.color}"></span><b>${esc(p.name)}</b>${i===net.me?' <small>· você</small>':''}</td><td class="r">${p.fin?fmtT(p.time):p.on?'na pista · volta '+Math.min(lobby.laps,Math.floor(((posts[i]||{}).d||0)/L)+1):'saiu'}</td></tr>`).join('')}</tbody></table>
+ ${net.host?'<button class="cta" id="nv">Nova corrida</button>':'<p>O anfitrião pode iniciar outra corrida.</p>'}
+ <button class="cta alt" id="lv">Sair da sala</button>`);
+ if($('nv'))$('nv').onclick=()=>{lobby.started=false;R=null;sendLobby()};
+ $('lv').onclick=leave;
+}
+
+// ===== CONTROLES =====
+['gas','lft','rgt'].forEach(id=>{
+ const b=$(id),on=v=>{btn[id]=v;b.classList.toggle('on',!!v)};
+ b.addEventListener('pointerdown',e=>{e.preventDefault();try{b.setPointerCapture(e.pointerId)}catch(x){}on(1);sound.start()});
+ ['pointerup','pointercancel','lostpointercapture'].forEach(ev=>b.addEventListener(ev,()=>on(0)));
+ b.addEventListener('contextmenu',e=>e.preventDefault());
+});
+addEventListener('keydown',e=>{keys[e.code]=true;if(e.code==='Escape')menu();if(e.code.startsWith('Arrow')||e.code==='Space')e.preventDefault()});
+addEventListener('keyup',e=>{keys[e.code]=false});
+$('menuBtn').onclick=menu;
+$('ctrBtn').onclick=centerTilt;
+addEventListener('resize',resize);
+document.addEventListener('visibilitychange',()=>{if(document.hidden){sound.stop();if(R&&!R.online&&R.run&&!R.fin)menu()}else if(R&&R.run)wake()});
+
+resize();
+const hm=/^#sala-([A-Z0-9]{5})$/i.exec(location.hash);
+hm?onlineMenu(hm[1].toUpperCase()):menu();
+requestAnimationFrame(loop);
+if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('../sw.js').catch(()=>{});
+}
+</script>
+</body>
+</html>
