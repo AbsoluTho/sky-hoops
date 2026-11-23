@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Missão Espacial</title>
+<meta name="description" content="Saia da órbita do planeta, acerte a lua e pouse com menos de 2 G.">
+<meta name="theme-color" content="#070b1f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Missão Espacial">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Nunito:wght@600;800&display=swap" rel="stylesheet">
+<style>
+/* VOICE: centro de controle de missão de brinquedo, tenso na hora da queima
+   IDEA: a carta de navegação de uma viagem da órbita do planeta até o pouso na lua
+   PICTURE: planeta e lua em proporção real, a trajetória prevista e o foguete
+   COLOUR and TYPE: azul-noite do espaço, laranja da chama, ciano da rota; Bungee + Nunito
+   LAYOUT: espaço em cima, dois botões de motor embaixo (lateral na horizontal) */
+:root{--case:#24306b;--case2:#141c45;--flame:#ff7a1f;--orb:#3fe0d0;--acc:#ffcc33;--ink:#10142e;--panel:#e9edff;--mut:#5a6290}
+*{box-sizing:border-box;min-width:0;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
+html,body{margin:0;height:100%;background:var(--case2);color:var(--ink);font:600 15px/1.3 Nunito,system-ui,sans-serif;overflow:hidden;touch-action:manipulation}
+#app{display:flex;flex-direction:column;height:100%;height:100dvh;padding:env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left)}
+#stage{position:relative;flex:1;min-height:0;margin:8px 8px 0;border-radius:18px;overflow:hidden;border:4px solid var(--case)}
+canvas{display:block;width:100%;height:100%}
+#hud{position:absolute;top:8px;left:8px;right:8px;display:flex;gap:6px;flex-wrap:wrap;pointer-events:none}
+.chip{background:rgba(233,237,255,.92);border-radius:999px;padding:5px 10px;font-size:13px;font-weight:800;white-space:nowrap}
+.chip.btn{pointer-events:auto;border:0;font:inherit;font-size:13px;font-weight:800;color:var(--ink);cursor:pointer}
+#tele{position:absolute;left:8px;right:8px;bottom:8px;display:flex;gap:6px;flex-wrap:wrap;pointer-events:none}
+.tl{background:rgba(7,11,31,.8);color:#fff;border:1px solid rgba(255,255,255,.18);border-radius:12px;padding:4px 10px;font:400 14px Bungee,sans-serif;white-space:nowrap}
+.tl small{display:block;font:800 10px Nunito,sans-serif;color:#aab4e8}
+.fuel{width:84px;height:8px;background:rgba(255,255,255,.2);border-radius:4px;overflow:hidden;margin-top:4px}
+.fuel b{display:block;height:100%;background:var(--flame);width:100%}
+#pred{position:absolute;left:50%;top:44px;transform:translateX(-50%);background:rgba(7,11,31,.82);color:#fff;padding:5px 12px;border-radius:12px;font-size:13px;font-weight:800;white-space:nowrap;pointer-events:none}
+#toast{position:absolute;left:50%;top:78px;transform:translateX(-50%);background:rgba(255,204,51,.95);color:#10142e;padding:7px 14px;border-radius:12px;font-size:14px;font-weight:800;max-width:92%;text-align:center;opacity:0;transition:opacity .25s;pointer-events:none}
+#toast.show{opacity:1}
+#controls{background:var(--case);padding:10px 12px calc(10px + env(safe-area-inset-bottom));display:flex;gap:12px;align-items:center;justify-content:space-between}
+.eng{flex:1;height:84px;border-radius:20px;border:0;color:#fff;font:400 16px/1.1 Bungee,sans-serif;box-shadow:0 5px 0 rgba(0,0,0,.4);cursor:pointer;touch-action:none}
+.eng small{display:block;font:800 11px Nunito,sans-serif;opacity:.85;margin-top:3px}
+.eng.on{transform:translateY(4px);box-shadow:0 1px 0 rgba(0,0,0,.4);filter:brightness(1.15)}
+#brk{background:linear-gradient(#ff5a5f,#b5141c)}
+#acc{background:linear-gradient(#ffa24a,#d4560b)}
+.eng:disabled{filter:grayscale(.8) brightness(.7)}
+#overlay{position:fixed;inset:0;background:rgba(5,8,24,.6);display:flex;align-items:center;justify-content:center;padding:18px;z-index:5}
+#overlay.hide{display:none}
+.card{background:#fff;border-radius:22px;padding:20px;max-width:410px;width:100%;max-height:92dvh;overflow:auto;text-align:center;border:5px solid var(--case);box-shadow:0 10px 30px rgba(0,0,0,.45);-webkit-user-select:text;user-select:text}
+.card h1{font:400 34px/1.05 Bungee,sans-serif;margin:0 0 6px;color:var(--case)}
+.card h2{font:400 26px/1.1 Bungee,sans-serif;margin:0 0 8px}
+.card p{margin:8px 0;color:var(--mut)}
+.card ol{text-align:left;color:var(--mut);padding-left:22px;margin:8px 0}
+.card .big{font-size:30px;margin:6px 0;color:#e0a800}
+.cta{display:block;width:100%;margin-top:10px;min-height:48px;border:0;border-radius:14px;font:400 16px Bungee,sans-serif;cursor:pointer;background:var(--flame);color:#fff;box-shadow:0 4px 0 #b84a00;text-decoration:none;line-height:48px}
+.cta.alt{background:var(--case);box-shadow:0 4px 0 var(--case2)}
+table{width:100%;border-collapse:collapse;margin:10px 0;text-align:left;font-size:14px}
+td{padding:6px 4px;border-bottom:1px solid #e6e9fa}
+td.r{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+[hidden]{display:none!important}
+button:focus-visible,a:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+@media (orientation:landscape) and (max-height:520px){
+ #app{flex-direction:row}
+ #stage{margin:8px 0 8px 8px}
+ #controls{width:150px;flex-direction:column;justify-content:center;padding:8px 10px}
+ .eng{width:100%;flex:none;height:42%}
+}
+@media (prefers-reduced-motion:reduce){#toast{transition:none}}
+</style>
+</head>
+<body>
+<div id="app">
+ <div id="stage">
+  <canvas id="cv"></canvas>
+  <div id="hud">
+   <button class="chip btn" id="menuBtn" aria-label="Menu">☰</button>
+   <span class="chip" id="hPhase">Fase 1</span>
+   <span class="chip" id="hRoute">Terra → Lua</span>
+   <span class="chip" id="hWarp">×1</span>
+   <button class="chip btn" id="rstBtn">Recomeçar</button>
+  </div>
+  <div id="pred">Trajetória: em órbita do planeta</div>
+  <div id="toast"></div>
+  <div id="tele">
+   <div class="tl"><small id="tDistL">DISTÂNCIA DA LUA</small><span id="tDist">0 km</span></div>
+   <div class="tl"><small id="tVelL">VELOCIDADE</small><span id="tVel">0</span></div>
+   <div class="tl" id="tAltBox" hidden><small>ALTITUDE</small><span id="tAlt">0</span></div>
+   <div class="tl"><small>COMBUSTÍVEL <span id="tFuelP">100</span></small><div class="fuel"><b id="tFuel"></b></div></div>
+  </div>
+ </div>
+ <div id="controls">
+  <button class="eng" id="brk">FREAR<small>segure</small></button>
+  <button class="eng" id="acc">ACELERAR<small>segure</small></button>
+ </div>
+</div>
+<div id="overlay"><div class="card" id="card"></div></div>
+
+<script>
+{
+const $=id=>document.getElementById(id);
+const cv=$('cv'),ctx=cv.getContext('2d'),stage=$('stage');
+const fmt=(n,d=1)=>n.toFixed(d).replace('.',',');
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const nf=n=>Math.round(n).toLocaleString('pt-BR');
+
+// Dados reais (raio em km, GM em km³/s², distância em km). A viagem começa numa órbita a 10 por cento do raio acima do planeta.
+const ROUTES=[
+ {o:{n:'Terra',de:'da',a:'à',em:'na',R:6371,GM:398600,c:['#3d8fe6','#163f80'],land:'#3f9a52'},t:{n:'Lua',de:'da',a:'à',em:'na',R:1737,GM:4903,c:['#d6d6dc','#7d7d86'],D:384400,dir:1}},
+ {o:{n:'Marte',R:3390,GM:42828,c:['#d8673d','#7d2a10'],land:'#a6431c'},t:{n:'Fobos',R:11.1,GM:0.000711,c:['#a89a8c','#5d5248'],D:9376,dir:1}},
+ {o:{n:'Júpiter',R:69911,GM:1.267e8,c:['#e6c49a','#8a5a36'],land:'#c08a5a',bands:1},t:{n:'Europa',R:1561,GM:3203,c:['#f2e7d0','#a89470'],D:671100,dir:1}},
+ {o:{n:'Saturno',R:58232,GM:3.793e7,c:['#f0d9a0','#9a7a40'],land:'#c9a960',bands:1,ring:1},t:{n:'Titã',R:2575,GM:8978,c:['#f0b45a','#9a5a1a'],D:1221870,dir:1}},
+ {o:{n:'Netuno',R:24622,GM:6.8365e6,c:['#4a74f0','#1a2f8a'],land:'#3557c8'},t:{n:'Tritão',R:1353,GM:1428,c:['#e8d8e0','#8a7882'],D:354759,dir:-1}}
+];
+const de=b=>(b.de||'de')+' '+b.n, aa=b=>(b.a||'a')+' '+b.n, em=b=>(b.em||'em')+' '+b.n;
+const GMO=1.1**3*(2*Math.PI/6)**2; // no jogo, a órbita inicial dá uma volta em 6 s
+const PARK=1.1, G0=9.81, STROKE=100; // G no pouso = v²/(2·g·curso do amortecedor)
+const LIMIT_G=2;
+
+let save={phase:1,stars:{}};
+try{save=Object.assign(save,JSON.parse(localStorage.getItem('missao')||'{}'))}catch(e){}
+const store=()=>{try{localStorage.setItem('missao',JSON.stringify(save))}catch(e){}};
+
+let phase=1, RT, MU, D, W, DIR, SOI, NEAR, KMU, VU, TU, ROUTE, budget, theta0, LAND;
+let rk=null, st='menu', trail=[], fx=[], pred=null, predT=0, warp=1, cam={x:0,y:0,s:0}, cw=0, ch=0, toastT, stars=[];
+const keys={acc:0,brk:0};
+
+function setupPhase(n){
+ phase=n; ROUTE=ROUTES[(n-1)%ROUTES.length];
+ const o=ROUTE.o,t=ROUTE.t, lap=Math.floor((n-1)/ROUTES.length);
+ RT=t.R/o.R; MU=GMO*t.GM/o.GM; D=t.D/o.R; DIR=t.dir;
+ W=DIR*Math.sqrt(GMO/D**3);
+ SOI=D*Math.pow(t.GM/o.GM,0.4);
+ NEAR=Math.max(6*RT,0.25*SOI,0.15);
+ KMU=o.R;                                           // km por unidade
+ const Treal=2*Math.PI*Math.sqrt((PARK*o.R)**3/o.GM);// período real da órbita inicial (s)
+ TU=Treal/6;                                        // segundos reais por segundo de jogo
+ VU=KMU/TU;                                         // km/s por unidade/s
+ // combustível: saída da órbita + chegada + folga (diminui nas voltas seguintes)
+ const vp=Math.sqrt(GMO*(2/PARK-2/(PARK+D))), dv1=vp-Math.sqrt(GMO/PARK);
+ const vmoon=Math.sqrt(GMO/D), vapo=vp*PARK/D, vArr=DIR>0?Math.abs(vmoon-vapo):vmoon+vapo, vesc=Math.sqrt(2*MU/RT), vland=Math.hypot(vArr,vesc);
+ // um tanque só para a viagem toda: sair da órbita + frear na chegada, com pouca folga (menos ainda nas voltas seguintes)
+ budget=(dv1+vland)*Math.max(1.2,1.5-0.1*lap);
+ // motor de pouso forte o bastante para parar dentro da região de aproximação
+ LAND=Math.max(2.2*MU/(RT*RT),(vland*1.3)**2/(2*0.4*NEAR));
+ const r=rngOf(n); theta0=r()*Math.PI*2;
+ stars=Array.from({length:180},()=>[r()*2-1,r()*2-1,r()]);
+ reset();
+}
+function rngOf(seed){let s=seed*9301+49297;return()=>{s=(s*9301+49297)%233280;return s/233280}}
+function reset(){
+ rk={x:PARK,y:0,vx:0,vy:Math.sqrt(GMO/PARK),t:0,used:0,left:false,ang:Math.PI/2,burn:0,cutV:0};
+ st='park'; trail=[]; fx=[]; pred=null; predT=0; cam.s=0; hud();
+}
+const moonAt=t=>{const a=theta0+W*t;return [D*Math.cos(a),D*Math.sin(a),-W*D*Math.sin(a),W*D*Math.cos(a)]};
+
+// ===== FÍSICA =====
+function nearTarget(x,y,t){const m=moonAt(t);return Math.hypot(x-m[0],y-m[1])<NEAR}
+function thrustAcc(x,y,t){
+ const dO=Math.hypot(x,y);
+ if(nearTarget(x,y,t))return LAND; // pouso: motor forte
+ if(dO<3)return 0.15;                                         // saída da órbita
+ return 0.012;                                                // correção fina no caminho
+}
+function accel(s,t,thr){
+ const r=Math.hypot(s.x,s.y), m=moonAt(t), dx=s.x-m[0], dy=s.y-m[1], rm=Math.hypot(dx,dy);
+ let ax=-GMO*s.x/r**3-MU*dx/rm**3, ay=-GMO*s.y/r**3-MU*dy/rm**3;
+ if(thr){
+  const near=rm<NEAR, rvx=s.vx-(near?m[2]:0), rvy=s.vy-(near?m[3]:0), rv=Math.hypot(rvx,rvy)||1;
+  const a=thrustAcc(s.x,s.y,t)*thr; ax+=a*rvx/rv; ay+=a*rvy/rv;
+ }
+ return [ax,ay];
+}
+function stepSize(s,t){
+ const m=moonAt(t), dO=Math.hypot(s.x,s.y)-1, dM=Math.hypot(s.x-m[0],s.y-m[1])-RT, v=Math.hypot(s.vx,s.vy)+0.02;
+ return clamp(0.04*Math.min(Math.max(dO,0.02),Math.max(dM,RT*0.05))/v,1e-5,0.01);
+}
+function check(s,t){
+ const m=moonAt(t), r=Math.hypot(s.x,s.y), rm=Math.hypot(s.x-m[0],s.y-m[1]);
+ if(r<1)return 'origin';
+ if(rm<RT)return 'target';
+ if(r>D*2.2)return 'lost';
+ return null;
+}
+// previsão: segue a trajetória sem motor até bater, se perder ou passar o tempo
+function predict(){
+ const s={x:rk.x,y:rk.y,vx:rk.vx,vy:rk.vy}; let t=rk.t, best=1e9, bestT=t, ev=null; const pts=[[s.x,s.y]];
+ const tEnd=t+Math.max(60,2.6*Math.PI/Math.sqrt(GMO/((PARK+D)/2)**3));
+ let n=0;
+ while(t<tEnd&&n<20000){
+  const h=Math.min(stepSize(s,t)*3,0.05);
+  let a=accel(s,t,0); s.vx+=a[0]*h/2; s.vy+=a[1]*h/2; s.x+=s.vx*h; s.y+=s.vy*h; t+=h; a=accel(s,t,0); s.vx+=a[0]*h/2; s.vy+=a[1]*h/2;
+  const m=moonAt(t), rm=Math.hypot(s.x-m[0],s.y-m[1]); if(rm<best){best=rm;bestT=t}
+  if(n%6===0)pts.push([s.x,s.y]);
+  ev=check(s,t); if(ev)break; n++;
+ }
+ pts.push([s.x,s.y]);
+ return {pts,best,bestT,ev};
+}
+function predText(){
+ if(st==='park')return 'Em órbita '+de(ROUTE.o)+'. Segure ACELERAR para sair rumo '+aa(ROUTE.t)+'.';
+ if(!pred)return '';
+ if(pred.ev==='target')return 'Rota: atinge '+ROUTE.t.n+'. Prepare a freada!';
+ if(pred.ev==='origin')return 'Rota: cai de volta '+em(ROUTE.o)+'.';
+ if(pred.ev==='lost')return 'Rota: escapa para o espaço.';
+ return 'Rota: passa a '+nf(Math.max(0,pred.best-RT)*KMU)+' km '+de(ROUTE.t)+'.';
+}
+
+// ===== LOOP DO VOO =====
+function burning(){return (keys.acc?1:0)-(keys.brk?1:0)}
+function tick(dt){
+ if(st!=='park'&&st!=='fly')return;
+ const thr=rk.used<budget?burning():0;
+ if(thr&&st==='park'){st='fly';rk.left=true}
+ const m=moonAt(rk.t), rm=Math.hypot(rk.x-m[0],rk.y-m[1]), near=rm<NEAR;
+ const rvx=rk.vx-(near?m[2]:0), rvy=rk.vy-(near?m[3]:0), relV=Math.hypot(rvx,rvy)+1e-4;
+ if(st==='park')warp=1;
+ else{
+  const dO=Math.hypot(rk.x,rk.y)-1, dM=rm-RT, tti=Math.min(dO/(Math.hypot(rk.vx,rk.vy)+1e-4),dM/relV);
+  warp=clamp(tti/4,0.25,60); if(thr)warp=Math.min(warp,near?0.6:1);
+ }
+ let simT=dt*warp;
+ while(simT>0){
+  const h=Math.min(stepSize(rk,rk.t),simT); simT-=h;
+  const th=rk.used<budget?burning():0;
+  let a=accel(rk,rk.t,th); rk.vx+=a[0]*h/2; rk.vy+=a[1]*h/2; rk.x+=rk.vx*h; rk.y+=rk.vy*h; rk.t+=h;
+  a=accel(rk,rk.t,th); rk.vx+=a[0]*h/2; rk.vy+=a[1]*h/2;
+  if(th){rk.used+=thrustAcc(rk.x,rk.y,rk.t)*h;rk.burn=th}else rk.burn=0;
+  const ev=check(rk,rk.t); if(ev){finish(ev);return}
+ }
+ if(rk.used>=budget&&burning()&&!rk.emptyMsg){rk.emptyMsg=1;toast('Acabou o combustível!')}
+ if(rk.t*TU>30*86400){finish('time');return}
+ if(!trail.length||Math.hypot(rk.x-trail[trail.length-1][0],rk.y-trail[trail.length-1][1])>Math.min(0.05,NEAR*0.05))trail.push([rk.x,rk.y]);
+ if(trail.length>6000)trail.splice(0,1500);
+}
+function finish(ev){
+ st='done'; keys.acc=keys.brk=0; setBtns();
+ const m=moonAt(rk.t);
+ if(ev==='target'){
+  const v=Math.hypot(rk.vx-m[2],rk.vy-m[3])*VU*1000, g=v*v/(2*G0*STROKE);
+  if(g<LIMIT_G){
+   const fuel=1-rk.used/budget, sts=g<0.7&&fuel>0.15?3:g<1.3?2:1;
+   save.stars[phase]=Math.max(save.stars[phase]||0,sts); save.phase=Math.max(save.phase,phase+1); store();
+   beep(660,.15);setTimeout(()=>beep(990,.3),150);
+   return resultCard('POUSOU!',`Pouso ${em(ROUTE.t)} com ${fmt(g,2)} G.`,sts,v,g,true);
+  }
+  boom(); return setTimeout(()=>resultCard('EXPLODIU!',`Chegou rápido demais ${em(ROUTE.t)}: o impacto foi de ${fmt(g,1)} G (limite ${LIMIT_G} G). Freie mais antes de tocar o chão.`,0,v,g,false),1300);
+ }
+ if(ev==='origin'){boom();return setTimeout(()=>resultCard('CAIU!',`O foguete caiu de volta ${em(ROUTE.o)}.`,0),1300)}
+ if(ev==='lost')return resultCard('PERDIDO NO ESPAÇO',`Velocidade demais: o foguete escapou da gravidade ${de(ROUTE.o)}.`,0);
+ resultCard('MISSÃO ABORTADA','Passou o tempo da missão sem chegar ao destino.',0);
+}
+function boom(){beep(60,.7,'sawtooth');for(let i=0;i<40;i++)fx.push({x:rk.x,y:rk.y,a:Math.random()*7,s:Math.random(),l:1,c:Math.random()<.5?'#ffcc33':'#ff5a1f'})}
+function resultCard(title,msg,sts,v,g,ok){
+ const days=rk.t*TU/86400;
+ card(`<h2>${title}</h2>${ok?`<div class="big">${'★'.repeat(sts)}${'☆'.repeat(3-sts)}</div>`:''}<p>${msg}</p>
+ <table><tbody>${v!=null?`<tr><td>Velocidade no toque</td><td class="r">${fmt(v,v<100?1:0)} m/s</td></tr><tr><td>Força do impacto</td><td class="r">${fmt(g,g<10?2:0)} G</td></tr>`:''}
+ <tr><td>Tempo de viagem</td><td class="r">${days<1?fmt(days*24,1)+' h':fmt(days,1)+' dias'}</td></tr>
+ <tr><td>Combustível que sobrou</td><td class="r">${Math.round(Math.max(0,1-rk.used/budget)*100)} por cento</td></tr></tbody></table>
+ ${ok?'<button class="cta" id="nx">Próxima fase</button><button class="cta alt" id="ag">Repetir fase</button>':'<button class="cta" id="ag">Tentar de novo</button>'}
+ <button class="cta alt" id="mn">Menu</button>`);
+ if($('nx'))$('nx').onclick=()=>{hide();setupPhase(phase+1);intro()};
+ $('ag').onclick=()=>{hide();reset()}; $('mn').onclick=menu;
+}
+
+// ===== TELAS =====
+function card(h){$('card').innerHTML=h;$('overlay').classList.remove('hide')}
+function hide(){$('overlay').classList.add('hide')}
+function toast(m,ms=2400){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),ms)}
+function hud(){
+ $('hPhase').textContent='Fase '+phase; $('hRoute').textContent=ROUTE.o.n+' → '+ROUTE.t.n;
+ $('tDistL').textContent=('DISTÂNCIA '+de(ROUTE.t)).toUpperCase();
+ setBtns();
+}
+function setBtns(){const en=st==='park'||st==='fly';$('acc').disabled=!en;$('brk').disabled=!en}
+function intro(){
+ const t=ROUTE.t, o=ROUTE.o;
+ card(`<h2>Fase ${phase}</h2><p><b>${o.n} → ${t.n}</b></p>
+ <table><tbody><tr><td>Distância até ${t.n}</td><td class="r">${nf(t.D)} km</td></tr><tr><td>Tamanho de ${t.n}</td><td class="r">${nf(t.R*2)} km</td></tr>
+ <tr><td>Gravidade ${em(t)}</td><td class="r">${fmt(t.GM/(t.R*t.R)*1000/G0,t.GM/(t.R*t.R)*1000/G0<0.01?4:2)} G</td></tr></tbody></table>
+ ${t.dir<0?'<p><b>Atenção:</b> '+t.n+' gira ao contrário do foguete.</p>':''}
+ ${t.R<50?'<p><b>Atenção:</b> '+t.n+' é minúscula e quase não tem gravidade: é preciso chegar devagar.</p>':''}
+ <button class="cta" id="go">Começar</button>`);
+ $('go').onclick=hide;
+}
+function menu(){
+ card(`<h1>MISSÃO ESPACIAL</h1><p>Leve o foguete da órbita do planeta até a lua e pouse com segurança.</p>
+ <ol><li>Segure <b>ACELERAR</b> para sair da órbita. Solte para cortar o motor na hora certa: a linha pontilhada mostra para onde você vai.</li>
+ <li>No caminho, toques curtos corrigem a rota.</li>
+ <li>Perto da lua, segure <b>FREAR</b> para desacelerar. Pouse com menos de ${LIMIT_G} G: mais que isso, explode.</li></ol>
+ <p><b>O tanque é um só para a viagem inteira.</b> Acelerar demais na saída deixa a chegada mais rápida, e aí pode faltar combustível para frear.</p>
+ <button class="cta" id="pl">${save.phase>1?'Continuar · fase '+save.phase:'Começar'}</button>
+ ${save.phase>1?'<button class="cta alt" id="rs">Recomeçar da fase 1</button>':''}
+ <a class="cta alt" href="../">← Trocar de jogo</a>
+ <p style="font-size:12px;margin-top:12px">Versão 1.0</p>`);
+ $('pl').onclick=()=>{hide();setupPhase(save.phase);intro()};
+ if($('rs'))$('rs').onclick=()=>{save={phase:1,stars:{}};store();hide();setupPhase(1);intro()};
+}
+
+// ===== DESENHO =====
+function resize(){const d=Math.min(2,devicePixelRatio||1);cw=stage.clientWidth;ch=stage.clientHeight;cv.width=cw*d;cv.height=ch*d;ctx.setTransform(d,0,0,d,0,0)}
+const SX=x=>cw/2+(x-cam.x)*cam.s, SY=y=>ch/2-(y-cam.y)*cam.s;
+function updateCam(dt){
+ if(!rk)return;
+ const m=moonAt(rk.t), rm=Math.hypot(rk.x-m[0],rk.y-m[1]), r=Math.hypot(rk.x,rk.y);
+ let cx,cy,half;
+ if(rm<Math.max(NEAR*3,RT*8)){cx=(rk.x+m[0])/2;cy=(rk.y+m[1])/2;half=Math.max(rm*0.75,RT*3)}
+ else if(r<4&&st!=='done'||st==='park'){cx=rk.x*0.3;cy=rk.y*0.3;half=Math.max(r*1.4,1.8)}
+ else{const xs=[0,m[0],rk.x],ys=[0,m[1],rk.y];if(pred&&pred.pts)for(let i=0;i<pred.pts.length;i+=8){xs.push(pred.pts[i][0]);ys.push(pred.pts[i][1])}const x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);cx=(x0+x1)/2;cy=(y0+y1)/2;half=Math.max((x1-x0)/2*(ch-90)/cw,(y1-y0)/2)+3}
+ const want=Math.min(cw,ch-90)/(2*half);
+ if(!cam.s){cam.s=want;cam.x=cx;cam.y=cy;return}
+ const k=Math.min(1,dt*2.5);
+ cam.s=Math.exp(Math.log(cam.s)+(Math.log(want)-Math.log(cam.s))*k); cam.x+=(cx-cam.x)*k; cam.y+=(cy-cam.y)*k;
+}
+function body(x,y,R,b,label){
+ const px=SX(x),py=SY(y),pr=Math.max(2.5,R*cam.s);
+ if(b.ring&&pr>4){ctx.strokeStyle='rgba(230,210,160,.6)';ctx.lineWidth=Math.max(1,pr*0.12);ctx.beginPath();ctx.ellipse(px,py,pr*2.1,pr*0.55,-0.3,0,7);ctx.stroke()}
+ const g=ctx.createRadialGradient(px-pr*0.35,py-pr*0.35,pr*0.1,px,py,pr);g.addColorStop(0,b.c[0]);g.addColorStop(1,b.c[1]);
+ ctx.fillStyle=g;ctx.beginPath();ctx.arc(px,py,pr,0,7);ctx.fill();
+ if(pr>14){ctx.save();ctx.beginPath();ctx.arc(px,py,pr,0,7);ctx.clip();
+  if(b.bands){for(let i=-4;i<=4;i++){ctx.fillStyle=i%2?'rgba(120,70,30,.25)':'rgba(255,255,255,.12)';ctx.fillRect(px-pr,py+i*pr*0.22,pr*2,pr*0.11)}}
+  else if(b.land){ctx.fillStyle=b.land;ctx.globalAlpha=.55;for(let i=0;i<5;i++){const a=i*1.3+0.4;ctx.beginPath();ctx.ellipse(px+Math.cos(a)*pr*0.5,py+Math.sin(a)*pr*0.45,pr*0.22,pr*0.12,a,0,7);ctx.fill()}ctx.globalAlpha=1}
+  else{ctx.fillStyle='rgba(0,0,0,.15)';for(let i=0;i<9;i++){const a=i*2.4,d=(i%3+1)*0.25;ctx.beginPath();ctx.arc(px+Math.cos(a)*pr*d,py+Math.sin(a)*pr*d,pr*(0.06+0.03*(i%3)),0,7);ctx.fill()}}
+  ctx.restore()}
+ if(label){ctx.font='800 12px Nunito,sans-serif';ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,.85)';ctx.fillText(label,px,py-pr-6)}
+}
+function draw(){
+ ctx.fillStyle='#070b1f';ctx.fillRect(0,0,cw,ch);
+ for(const s of stars){ctx.fillStyle=`rgba(255,255,255,${.2+s[2]*.6})`;ctx.fillRect(cw/2+s[0]*cw*0.6,ch/2+s[1]*ch*0.6,1.4,1.4)}
+ if(!rk)return;
+ const m=moonAt(rk.t);
+ // órbita da lua
+ ctx.strokeStyle='rgba(255,255,255,.12)';ctx.setLineDash([3,7]);ctx.beginPath();ctx.arc(SX(0),SY(0),D*cam.s,0,7);ctx.stroke();ctx.setLineDash([]);
+ body(0,0,1,ROUTE.o,ROUTE.o.n);
+ // previsão e lua "fantasma" no ponto de maior aproximação
+ if(pred&&st==='fly'||pred&&st==='park'){
+  const col=pred.ev==='target'?'rgba(63,224,208,.9)':pred.ev==='origin'||pred.ev==='lost'?'rgba(255,90,90,.75)':'rgba(255,204,51,.8)';
+  ctx.strokeStyle=col;ctx.lineWidth=2;ctx.setLineDash([4,6]);ctx.beginPath();pred.pts.forEach((q,i)=>i?ctx.lineTo(SX(q[0]),SY(q[1])):ctx.moveTo(SX(q[0]),SY(q[1])));ctx.stroke();ctx.setLineDash([]);
+  if(st==='fly'&&Math.hypot(rk.x-m[0],rk.y-m[1])>NEAR*3){const gm=moonAt(pred.bestT);ctx.strokeStyle='rgba(255,255,255,.35)';ctx.beginPath();ctx.arc(SX(gm[0]),SY(gm[1]),Math.max(4,RT*cam.s),0,7);ctx.stroke()}
+ }
+ body(m[0],m[1],RT,ROUTE.t,ROUTE.t.n);
+ if(trail.length>1){ctx.strokeStyle='rgba(255,170,90,.75)';ctx.lineWidth=2;ctx.beginPath();trail.forEach((q,i)=>i?ctx.lineTo(SX(q[0]),SY(q[1])):ctx.moveTo(SX(q[0]),SY(q[1])));ctx.lineTo(SX(rk.x),SY(rk.y));ctx.stroke()}
+ if(st!=='done'||!fx.length){
+  const near=Math.hypot(rk.x-m[0],rk.y-m[1])<NEAR, rvx=rk.vx-(near?m[2]:0), rvy=rk.vy-(near?m[3]:0);
+  const ang=Math.atan2(rvy,rvx)+(rk.burn<0?Math.PI:0), x=SX(rk.x), y=SY(rk.y), s=11;
+  ctx.save();ctx.translate(x,y);ctx.rotate(-ang+Math.PI/2);
+  if(rk.burn){ctx.fillStyle='#ffcc33';ctx.beginPath();ctx.moveTo(-s*0.22,s*0.55);ctx.lineTo(0,s*(1.1+Math.random()*0.5));ctx.lineTo(s*0.22,s*0.55);ctx.fill()}
+  ctx.fillStyle='#f2f4ff';ctx.beginPath();ctx.moveTo(0,-s*0.75);ctx.quadraticCurveTo(s*0.32,-s*0.3,s*0.24,s*0.55);ctx.lineTo(-s*0.24,s*0.55);ctx.quadraticCurveTo(-s*0.32,-s*0.3,0,-s*0.75);ctx.fill();
+  ctx.fillStyle='#e3262f';ctx.beginPath();ctx.moveTo(-s*0.24,s*0.2);ctx.lineTo(-s*0.45,s*0.62);ctx.lineTo(-s*0.22,s*0.55);ctx.fill();ctx.beginPath();ctx.moveTo(s*0.24,s*0.2);ctx.lineTo(s*0.45,s*0.62);ctx.lineTo(s*0.22,s*0.55);ctx.fill();
+  ctx.restore();
+ }
+ for(const f of fx){f.s+=0.03;f.l-=0.02;ctx.globalAlpha=Math.max(0,f.l);ctx.fillStyle=f.c;ctx.beginPath();ctx.arc(SX(rk.x)+Math.cos(f.a)*f.s*40,SY(rk.y)+Math.sin(f.a)*f.s*40,3,0,7);ctx.fill()}
+ fx=fx.filter(f=>f.l>0); ctx.globalAlpha=1;
+}
+let teleT=0;
+function tele(dt){
+ teleT+=dt; if(teleT<0.1||!rk)return; teleT=0;
+ const m=moonAt(rk.t), dx=rk.x-m[0], dy=rk.y-m[1], rm=Math.hypot(dx,dy), near=rm<NEAR;
+ $('tDist').textContent=nf(Math.max(0,rm-RT)*KMU)+' km';
+ const rvx=rk.vx-(near?m[2]:0), rvy=rk.vy-(near?m[3]:0), v=Math.hypot(rvx,rvy)*VU;
+ $('tVelL').textContent=near?('VELOCIDADE (em relação '+aa(ROUTE.t)+')').toUpperCase():'VELOCIDADE';
+ $('tVel').textContent=v<1?fmt(v*1000,v*1000<100?1:0)+' m/s':fmt(v,2)+' km/s';
+ $('tAltBox').hidden=!near;
+ if(near){const vr=(rvx*dx+rvy*dy)/rm*VU*1000;$('tAlt').textContent=nf((rm-RT)*KMU)+' km · '+(vr<0?'descendo ':'subindo ')+fmt(Math.abs(vr),Math.abs(vr)<100?1:0)+' m/s'}
+ {const f=Math.max(0,100-rk.used/budget*100);$('tFuel').style.width=f+'%';$('tFuelP').textContent=Math.round(f)+' por cento';$('tFuel').style.background=f<25?'#ff3b3b':''}
+ $('hWarp').textContent='×'+(warp<1?fmt(warp,2):Math.round(warp));
+ $('pred').textContent=predText();
+}
+let last=0;
+function loop(t){
+ const dt=Math.min(.05,(t-last)/1000||0); last=t;
+ tick(dt);
+ predT-=dt; if(rk&&(st==='fly'||st==='park')&&predT<=0){pred=predict();predT=burning()?0.15:0.5}
+ updateCam(dt); draw(); tele(dt);
+ requestAnimationFrame(loop);
+}
+let actx,eng,engG;
+function engine(on){try{actx=actx||new(window.AudioContext||window.webkitAudioContext)();if(!eng){eng=actx.createOscillator();engG=actx.createGain();eng.type='sawtooth';eng.frequency.value=70;engG.gain.value=0;eng.connect(engG).connect(actx.destination);eng.start()}engG.gain.setTargetAtTime(on?0.05:0,actx.currentTime,.05)}catch(e){}}
+function beep(f,d,type='triangle'){try{actx=actx||new(window.AudioContext||window.webkitAudioContext)();const o=actx.createOscillator(),g=actx.createGain();o.frequency.value=f;o.type=type;g.gain.setValueAtTime(.12,actx.currentTime);g.gain.exponentialRampToValueAtTime(.001,actx.currentTime+d);o.connect(g).connect(actx.destination);o.start();o.stop(actx.currentTime+d)}catch(e){}}
+
+['acc','brk'].forEach(id=>{
+ const b=$(id),on=v=>{if(b.disabled)v=0;keys[id]=v;b.classList.toggle('on',!!v);engine(keys.acc||keys.brk)};
+ b.addEventListener('pointerdown',e=>{e.preventDefault();try{b.setPointerCapture(e.pointerId)}catch(x){}on(1)});
+ ['pointerup','pointercancel','lostpointercapture'].forEach(ev=>b.addEventListener(ev,()=>on(0)));
+ b.addEventListener('contextmenu',e=>e.preventDefault());
+});
+addEventListener('keydown',e=>{if(e.code==='ArrowUp'||e.code==='KeyW'){keys.acc=1;engine(1)}if(e.code==='ArrowDown'||e.code==='KeyS'){keys.brk=1;engine(1)}});
+addEventListener('keyup',e=>{if(e.code==='ArrowUp'||e.code==='KeyW')keys.acc=0;if(e.code==='ArrowDown'||e.code==='KeyS')keys.brk=0;engine(keys.acc||keys.brk)});
+$('menuBtn').onclick=menu;
+$('rstBtn').onclick=()=>{if(st!=='menu'){hide();reset()}};
+new ResizeObserver(resize).observe(stage);
+
+resize(); setupPhase(save.phase); menu();
+requestAnimationFrame(loop);
+if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('../sw.js').catch(()=>{});
+}
+</script>
+</body>
+</html>

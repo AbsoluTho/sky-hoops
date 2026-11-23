@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+ <defs><radialGradient id="e" cx=".35" cy=".35" r=".7"><stop offset="0" stop-color="#3d8fe6"/><stop offset="1" stop-color="#163f80"/></radialGradient>
+ <radialGradient id="m" cx=".35" cy=".35" r=".7"><stop offset="0" stop-color="#e2e2e8"/><stop offset="1" stop-color="#7d7d86"/></radialGradient></defs>
+ <rect width="512" height="512" fill="#070b1f"/>
+ <g fill="#fff"><circle cx="60" cy="60" r="2"/><circle cx="250" cy="40" r="1.6"/><circle cx="470" cy="300" r="2"/><circle cx="40" cy="300" r="1.6"/><circle cx="300" cy="470" r="2"/><circle cx="460" cy="470" r="1.6"/><circle cx="200" cy="230" r="1.4"/></g>
+ <circle cx="130" cy="390" r="92" fill="url(#e)"/>
+ <g fill="#3f9a52" opacity=".6"><ellipse cx="105" cy="365" rx="30" ry="15" transform="rotate(25 105 365)"/><ellipse cx="160" cy="420" rx="34" ry="16" transform="rotate(-20 160 420)"/></g>
+ <circle cx="400" cy="120" r="54" fill="url(#m)"/>
+ <g fill="rgba(0,0,0,.15)"><circle cx="385" cy="105" r="10"/><circle cx="415" cy="140" r="7"/><circle cx="420" cy="100" r="5"/></g>
+ <path d="M200 330 C 250 170, 330 150, 372 160" fill="none" stroke="#3fe0d0" stroke-width="8" stroke-linecap="round" stroke-dasharray="4 18"/>
+ <g transform="translate(290 196) rotate(55)">
+  <path d="M-9 40 L0 78 L9 40Z" fill="#ffcc33"/>
+  <path d="M0 -52 Q22 -18 17 40 L-17 40 Q-22 -18 0 -52Z" fill="#f2f4ff"/>
+  <path d="M-17 12 L-32 46 L-15 40Z M17 12 L32 46 L15 40Z" fill="#e3262f"/>
+  <circle cx="0" cy="-12" r="8" fill="#3fe0d0"/>
+ </g>
+</svg>

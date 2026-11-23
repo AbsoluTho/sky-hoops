@@ -6,7 +6,7 @@ A página inicial deixa escolher o jogo:
 
 - **Sky Hoops** (`basquete/`) — basquete galáctico
 - **Pedrada** (`pedrada/`) — duelo entre telhados: de 2 a 4 jogadores, cada um num prédio, acertando os outros com pedras; o último em pé vence; mesmo aparelho ou online
-- **Órbita** (`orbita/`) — coloque o foguete em órbita: empuxo, ângulo de saída da atmosfera e corte manual do motor; planeta e peso mudam a cada missão
+- **Missão Espacial** (`missao/`) — da órbita do planeta ao pouso na lua, com um tanque só de combustível; fases: Terra→Lua, Marte→Fobos, Júpiter→Europa, Saturno→Titã, Netuno→Tritão
 - **Oval Turbo** (`oval-turbo/`) — corrida no oval com curvas inclinadas, estilo Enduro; acelerador + botões ou inclinação do aparelho, travado na horizontal; solo ou online
 
 ## Sky Hoops — Basquete Balístico
@@ -35,6 +35,6 @@ Depois de instalado, o jogo abre em tela cheia e funciona sem internet.
 - `basquete/index.html` — Sky Hoops
 - `oval-turbo/index.html` — Oval Turbo
 - `pedrada/index.html` — Pedrada
-- `orbita/index.html` — Órbita
+- `missao/index.html` — Missão Espacial
 - `manifest.webmanifest` e `sw.js` — instalação como app e funcionamento offline
 - `icons/` — ícone e logo
