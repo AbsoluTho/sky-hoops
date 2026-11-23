@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Sky Hoops · Jogos</title>
-<meta name="description" content="Escolha o jogo: Sky Hoops (basquete galáctico), Oval Turbo (corrida no oval) ou Pedrada (duelo entre telhados).">
+<meta name="description" content="Escolha o jogo: Sky Hoops (basquete galáctico), Oval Turbo (corrida no oval) Pedrada (duelo entre telhados) ou Órbita (foguete em órbita).">
 <meta name="theme-color" content="#1f86a6">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -31,7 +31,7 @@ html,body{margin:0;min-height:100%;background:var(--deep);color:#fff;font:600 16
 body{min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:max(20px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(20px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
 h1{font:400 clamp(28px,6vw,46px)/1.05 Bungee,sans-serif;margin:0 0 4px;text-align:center}
 .sub{margin:0 0 22px;color:#d6f3fb;text-align:center}
-.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;width:100%;max-width:1040px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;width:100%;max-width:900px}
 .game{display:flex;flex-direction:column;text-decoration:none;color:var(--ink);background:#fff;border-radius:24px;overflow:hidden;border:5px solid #fff;box-shadow:0 8px 0 rgba(0,0,0,.25);transition:transform .15s}
 .game:active{transform:translateY(4px);box-shadow:0 4px 0 rgba(0,0,0,.25)}
 .game:focus-visible{outline:4px solid #ffd23a;outline-offset:3px}
@@ -44,9 +44,16 @@ h1{font:400 clamp(28px,6vw,46px)/1.05 Bungee,sans-serif;margin:0 0 4px;text-alig
 .oval{border-color:#15161a}
 .pedra .tag{background:#8a5a44}
 .pedra{border-color:#8a5a44}
+.orb .tag{background:#24306b}
+.orb{border-color:#24306b}
 .foot{margin-top:20px;font-size:13px;color:#cdeef8;text-align:center;max-width:520px}
 @media (max-width:820px) and (orientation:portrait){.grid{grid-template-columns:minmax(0,1fr)}.game{flex-direction:row;align-items:center}.art{width:38%;flex:none;align-self:stretch;aspect-ratio:auto;height:auto;max-height:none}.info h2{font-size:19px}}
-@media (orientation:landscape) and (max-height:520px){.game{flex-direction:row;align-items:center}.art{width:40%;flex:none;align-self:stretch;aspect-ratio:auto;height:auto;max-height:none}.sub{margin-bottom:12px}.info h2{font-size:19px}.info p{font-size:14px}.foot{margin-top:12px}}
+@media (orientation:landscape) and (max-height:520px){h1{font-size:26px}.grid{gap:10px}.art{width:30%}.info{padding:8px 12px}.info p{display:none}.tag{margin-top:6px}.sub{margin-bottom:12px}.info h2{font-size:19px}.info p{font-size:14px}.foot{margin-top:12px}}
+/* todos os cartões em linha: arte quadrada à esquerda, texto à direita */
+.game{flex-direction:row;align-items:center}
+.art{width:150px;height:150px;flex:none;aspect-ratio:1/1;max-height:none;align-self:center}
+@media (max-width:820px) and (orientation:portrait){.art{width:118px;height:118px}}
+@media (orientation:landscape) and (max-height:520px){.art{width:86px;height:86px}.info p{display:none}body{justify-content:flex-start}}
 @media (prefers-reduced-motion:reduce){.game{transition:none}}
 </style>
 </head>
@@ -65,6 +72,10 @@ h1{font:400 clamp(28px,6vw,46px)/1.05 Bungee,sans-serif;margin:0 0 4px;text-alig
  <a class="game pedra" href="pedrada/">
   <img class="art" src="pedrada/icons/icon-512.png" alt="">
   <div class="info"><h2>Pedrada</h2><p>Do alto dos prédios, acerte os outros com pedras. O último em pé vence. Até 4 jogadores.</p><span class="tag">Arremessar</span></div>
+ </a>
+ <a class="game orb" href="orbita/">
+  <img class="art" src="orbita/icons/icon-512.png" alt="">
+  <div class="info"><h2>Órbita</h2><p>Coloque o foguete em órbita: escolha empuxo e ângulo e corte o motor na hora certa.</p><span class="tag">Lançar</span></div>
  </a>
 </div>
 <p class="foot">Para instalar como app: no iPhone, Compartilhar → Adicionar à Tela de Início. No Android, menu → Instalar app.</p>

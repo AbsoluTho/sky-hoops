@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Órbita</title>
+<meta name="description" content="Coloque o foguete em órbita: escolha o empuxo e o ângulo e corte o motor na hora certa.">
+<meta name="theme-color" content="#070b1f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Órbita">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Nunito:wght@600;800&display=swap" rel="stylesheet">
+<style>
+/* VOICE: centro de controle de missão de brinquedo, tenso na hora do corte do motor
+   IDEA: o painel de lançamento de um foguete, com a órbita desenhada ao redor do planeta
+   PICTURE: o planeta inteiro no espaço, o foguete subindo e a trajetória prevista
+   COLOUR and TYPE: azul-noite do espaço, laranja da chama, ciano da órbita; Bungee + Nunito
+   LAYOUT: espaço em cima, painel de lançamento embaixo (lateral na horizontal) */
+:root{--space:#070b1f;--case:#24306b;--case2:#141c45;--flame:#ff7a1f;--orb:#3fe0d0;--acc:#ffcc33;--ink:#10142e;--panel:#e9edff;--mut:#5a6290}
+*{box-sizing:border-box;min-width:0;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--case2);color:var(--ink);font:600 15px/1.3 Nunito,system-ui,sans-serif;overflow:hidden;touch-action:manipulation}
+#app{display:flex;flex-direction:column;height:100%;height:100dvh;padding:env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left)}
+#stage{position:relative;flex:1;min-height:0;margin:8px 8px 0;border-radius:18px;overflow:hidden;border:4px solid var(--case)}
+canvas{display:block;width:100%;height:100%}
+#hud{position:absolute;top:8px;left:8px;right:8px;display:flex;gap:6px;flex-wrap:wrap;pointer-events:none}
+.chip{background:rgba(233,237,255,.92);border-radius:999px;padding:5px 10px;font-size:13px;font-weight:800;white-space:nowrap}
+.chip.btn{pointer-events:auto;border:0;font:inherit;font-size:13px;font-weight:800;color:var(--ink);cursor:pointer}
+.chip.on{background:var(--acc)}
+#tele{position:absolute;left:8px;bottom:8px;display:flex;gap:6px;flex-wrap:wrap;pointer-events:none}
+.tl{background:rgba(7,11,31,.78);color:#fff;border:1px solid rgba(255,255,255,.18);border-radius:12px;padding:4px 10px;font:400 15px Bungee,sans-serif;white-space:nowrap}
+.tl small{display:block;font:800 10px Nunito,sans-serif;color:#aab4e8}
+.fuel{width:90px;height:8px;background:rgba(255,255,255,.2);border-radius:4px;overflow:hidden;margin-top:3px}
+.fuel b{display:block;height:100%;background:var(--flame);width:100%}
+#toast{position:absolute;left:50%;top:52px;transform:translateX(-50%);background:rgba(7,11,31,.9);color:#fff;padding:8px 14px;border-radius:12px;font-size:14px;max-width:92%;text-align:center;opacity:0;transition:opacity .25s;pointer-events:none}
+#toast.show{opacity:1}
+#controls{background:var(--case);padding:10px 12px calc(10px + env(safe-area-inset-bottom));display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 12px;align-items:center}
+.ctl{display:grid;grid-template-columns:78px 44px minmax(0,1fr) 44px;gap:6px;align-items:center;background:var(--panel);border-radius:14px;padding:4px 6px}
+.ctl label{font-size:11px;color:var(--mut);line-height:1.1}
+.ctl label span{display:block;color:var(--ink);font-size:17px;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+.step{height:44px;border-radius:12px;border:0;background:#fff;color:var(--ink);font-size:20px;font-weight:800;box-shadow:0 2px 0 rgba(0,0,0,.15);cursor:pointer}
+.step:disabled,input[type=range]:disabled{opacity:.45}
+input[type=range]{width:100%;accent-color:var(--flame);height:32px}
+.info{font-size:12px;color:#d6dcff;padding:0 4px}
+#fire{grid-column:2;grid-row:1/-1;width:100px;height:100px;border-radius:50%;border:5px solid var(--acc);background:radial-gradient(circle at 35% 30%,#ffb066,var(--flame) 55%,#b84a00);color:#fff;font:400 15px/1.05 Bungee,sans-serif;box-shadow:0 6px 0 #a88300;cursor:pointer}
+#fire.cut{background:radial-gradient(circle at 35% 30%,#ff8a8a,#e3262f 55%,#8f0e14);font-size:13px}
+#fire:active{transform:translateY(3px);box-shadow:0 3px 0 #a88300}
+#fire:disabled{filter:grayscale(.7) brightness(.8)}
+#overlay{position:fixed;inset:0;background:rgba(5,8,24,.6);display:flex;align-items:center;justify-content:center;padding:18px;z-index:5}
+#overlay.hide{display:none}
+.card{background:#fff;border-radius:22px;padding:20px;max-width:400px;width:100%;max-height:92dvh;overflow:auto;text-align:center;border:5px solid var(--case);box-shadow:0 10px 30px rgba(0,0,0,.45)}
+.card h1{font:400 38px/1.05 Bungee,sans-serif;margin:0 0 6px;color:var(--case)}
+.card h2{font:400 26px/1.1 Bungee,sans-serif;margin:0 0 8px}
+.card p{margin:8px 0;color:var(--mut)}
+.card .big{font-size:30px;margin:6px 0;color:#e0a800}
+.cta{display:block;width:100%;margin-top:10px;min-height:48px;border:0;border-radius:14px;font:400 16px Bungee,sans-serif;cursor:pointer;background:var(--flame);color:#fff;box-shadow:0 4px 0 #b84a00;text-decoration:none;line-height:48px}
+.cta.alt{background:var(--case);box-shadow:0 4px 0 var(--case2)}
+table{width:100%;border-collapse:collapse;margin:10px 0;text-align:left;font-size:14px}
+td{padding:6px 4px;border-bottom:1px solid #e6e9fa}
+td.r{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+[hidden]{display:none!important}
+button:focus-visible,a:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+@media (orientation:landscape) and (max-height:520px){
+ #app{flex-direction:row}
+ #stage{margin:8px 0 8px 8px}
+ #controls{width:320px;grid-template-columns:minmax(0,1fr);align-content:center;padding:8px 10px}
+ #fire{grid-column:1;grid-row:auto;justify-self:center;width:84px;height:84px}
+}
+@media (prefers-reduced-motion:reduce){#toast{transition:none}}
+</style>
+</head>
+<body>
+<div id="app">
+ <div id="stage">
+  <canvas id="cv"></canvas>
+  <div id="hud">
+   <button class="chip btn" id="menuBtn" aria-label="Menu">☰</button>
+   <span class="chip" id="hLevel">Missão 1</span>
+   <span class="chip" id="hPlanet">Terra</span>
+   <span class="chip" id="hMass">Foguete 50 t</span>
+   <span class="chip" id="hStars">★ 0</span>
+   <button class="chip btn" id="guideBtn">Guia</button>
+  </div>
+  <div id="tele">
+   <div class="tl"><small>ALTITUDE</small><span id="tAlt">0 km</span></div>
+   <div class="tl"><small>VELOCIDADE</small><span id="tVel">0,0 km/s</span></div>
+   <div class="tl"><small>COMBUSTÍVEL</small><div class="fuel"><b id="tFuel"></b></div></div>
+  </div>
+  <div id="toast"></div>
+ </div>
+ <div id="controls">
+  <div class="ctl"><label>Empuxo<span id="fVal">0 tf</span></label><button class="step" data-t="f" data-d="-1">−</button><input type="range" id="fR" min="10" max="300" step="1" value="80"><button class="step" data-t="f" data-d="1">+</button></div>
+  <div class="ctl"><label>Ângulo de saída<span id="aVal">10°</span></label><button class="step" data-t="a" data-d="-1">−</button><input type="range" id="aR" min="0" max="80" step="0.5" value="10"><button class="step" data-t="a" data-d="1">+</button></div>
+  <div class="info" id="info">Peso na plataforma: 50 tf</div>
+  <button id="fire">LANÇAR</button>
+ </div>
+</div>
+<div id="overlay"><div class="card" id="card"></div></div>
+
+<script>
+{
+const $=id=>document.getElementById(id);
+const cv=$('cv'),ctx=cv.getContext('2d'),stage=$('stage');
+const fmt=(n,d=1)=>n.toFixed(d).replace('.',',');
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+// Unidades do jogo: na Terra a gravidade na superfície vale 1, e 1 tf de empuxo em 1 t de foguete dá 1 de aceleração.
+const PLANETS=[
+ {n:'Terra',g:1,R:100,atm:15,km:6371,c:['#2f7fd8','#1d4f9a'],land:'#3f9a52',halo:'110,180,255'},
+ {n:'Lua',g:0.165,R:60,atm:3,km:1737,c:['#b9b9c2','#77777f'],land:'#9a9aa3',halo:'200,200,210'},
+ {n:'Marte',g:0.38,R:75,atm:8,km:3390,c:['#d0623a','#8a3115'],land:'#b04a22',halo:'255,160,120'},
+ {n:'Júpiter',g:2.53,R:140,atm:30,km:69911,c:['#d8b48a','#8a5a36'],land:'#b38657',halo:'255,220,170'},
+ {n:'Planeta X',g:1.6,R:90,atm:20,km:5000,c:['#8a3ffc','#3c167a'],land:'#5b2aa8',halo:'200,140,255'}
+];
+const SEQ=[1,2,0,1,0,2,0,3,4,2,0,3,4];
+const SOI=9; // além de 9 raios do planeta o foguete se perde no espaço
+function rng(seed){return()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+
+let save={level:1,stars:{}};
+try{save=Object.assign(save,JSON.parse(localStorage.getItem('orbita')||'{}'))}catch(e){}
+const store=()=>{try{localStorage.setItem('orbita',JSON.stringify(save))}catch(e){}};
+let level=1, P=PLANETS[0], mass=50, budget=30, guide=false, guideUsed=false, tries=0;
+let rk=null, phase='pad', trail=[], fx=[], stars=[], warp=1, toastT;
+let cam={x:0,y:0,s:1}, cw=0, ch=0;
+const GM=()=>P.g*P.R*P.R;
+const vc=r=>Math.sqrt(GM()/r);
+const kmU=()=>P.km/P.R;                              // km por unidade do jogo
+const vU=()=>Math.sqrt(P.g*9.81*P.km*1000)/1000/Math.sqrt(P.g*P.R); // km/s por unidade/s
+
+function startLevel(n){
+ level=n; const r=rng(n*977+31);
+ P=PLANETS[n<=SEQ.length?SEQ[n-1]:Math.floor(r()*PLANETS.length)];
+ mass=Math.round(20+r()*130);
+ budget=vc(P.R+P.atm)*3.2+Math.sqrt(P.g*P.R)*0.6; // dá para chegar à órbita e também para passar do ponto e escapar
+ const W=mass*P.g;
+ $('fR').min=Math.max(1,Math.round(W*0.8)); $('fR').max=Math.round(W*3.2); $('fR').step=W>60?1:0.5;
+ $('fR').value=Math.round(W*1.6*2)/2; $('aR').value=10;
+ tries=0; guideUsed=false; guide=n<=2;
+ stars=Array.from({length:160},()=>[Math.random()*2-1,Math.random()*2-1,Math.random()]);
+ reset(); upd(); hud();
+}
+function reset(){
+ rk={x:0,y:P.R+0.6,vx:0,vy:0,ang:Math.PI/2,used:0,t:0,fire:false};
+ phase='pad'; trail=[]; fx=[]; warp=1; cam.s=0;
+ $('fire').textContent='LANÇAR'; $('fire').classList.remove('cut'); setControls();
+}
+function upd(){
+ $('fVal').textContent=fmt(+$('fR').value,+$('fR').value<100?1:0)+' tf';
+ $('aVal').textContent=fmt(+$('aR').value)+'°';
+ $('info').textContent='Peso do foguete na plataforma: '+fmt(mass*P.g,mass*P.g<100?1:0)+' tf. O empuxo precisa ser maior que isso.';
+}
+function hud(){
+ $('hLevel').textContent='Missão '+level;
+ $('hPlanet').textContent=P.n+' · '+fmt(P.g,2)+' G';
+ $('hMass').textContent='Foguete '+mass+' t';
+ $('hStars').textContent='★ '+Object.values(save.stars).reduce((a,b)=>a+b,0);
+ $('guideBtn').classList.toggle('on',guide);
+}
+function setControls(){
+ const pad=phase==='pad';
+ document.querySelectorAll('#controls .step,#controls input').forEach(e=>e.disabled=!pad);
+ $('fire').disabled=!(pad||phase==='atmo'||phase==='burn');
+}
+function toast(m,ms=2400){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),ms)}
+function card(h){$('card').innerHTML=h;$('overlay').classList.remove('hide')}
+function hide(){$('overlay').classList.add('hide')}
+
+// ===== ÓRBITA PREVISTA (cônica a partir de posição e velocidade) =====
+function elements(x,y,vx,vy){
+ const mu=GM(), r=Math.hypot(x,y), v2=vx*vx+vy*vy, h=x*vy-y*vx, eps=v2/2-mu/r;
+ const ex=(vy*h)/mu-x/r, ey=(-vx*h)/mu-y/r, e=Math.hypot(ex,ey), p=h*h/mu;
+ const a=eps<0?-mu/(2*eps):Infinity, rp=p/(1+e), ra=e<1?p/(1-e):Infinity;
+ return {eps,e,p,a,rp,ra,w:Math.atan2(ey,ex),h};
+}
+function verdict(el){
+ if(el.eps>=0||el.ra>SOI*P.R)return 'escape';
+ if(el.rp<P.R+P.atm)return 'fall';
+ return 'orbit';
+}
+function drawConic(el,col,dash){
+ if(!el.p||!isFinite(el.p))return;
+ ctx.strokeStyle=col;ctx.lineWidth=2;ctx.setLineDash(dash||[]);ctx.beginPath();
+ let first=true;
+ for(let i=0;i<=360;i++){
+  const nu=i/360*Math.PI*2, den=1+el.e*Math.cos(nu); if(den<=0.02){first=true;continue}
+  const r=el.p/den; if(r>SOI*P.R*1.2){first=true;continue}
+  const x=r*Math.cos(nu+el.w)*(el.h<0?1:1), y=r*Math.sin(nu+el.w);
+  const sx=SX(x), sy=SY(y); if(first){ctx.moveTo(sx,sy);first=false}else ctx.lineTo(sx,sy);
+ }
+ ctx.stroke();ctx.setLineDash([]);
+}
+
+// ===== VOO =====
+function launch(){
+ hide(); tries++;
+ const F=+$('fR').value;
+ if(F<=mass*P.g){phase='done';toast('Empuxo menor que o peso: o foguete não sai do chão.');setTimeout(()=>result('ground'),1600);setControls();return}
+ phase='atmo'; rk.fire=true; if(guide)guideUsed=true;
+ $('fire').textContent='CORTAR MOTOR'; $('fire').classList.add('cut'); setControls(); beep(90,.6,'sawtooth');
+}
+function cut(why){
+ if(phase!=='atmo'&&phase!=='burn')return;
+ rk.fire=false; phase='coast'; setControls();
+ const el=elements(rk.x,rk.y,rk.vx,rk.vy); rk.el=el; rk.verdict=verdict(el); rk.swept=0; rk.lastA=Math.atan2(rk.y,rk.x);
+ const period=el.eps<0?2*Math.PI*Math.sqrt(el.a**3/GM()):60;
+ warp=clamp(period/14,1,40);
+ toast(why||'Motor desligado.'); beep(300,.12);
+ $('fire').textContent='…';
+}
+function step(dt){
+ const r=Math.hypot(rk.x,rk.y), mu=GM(), g=mu/(r*r);
+ let ax=-g*rk.x/r, ay=-g*rk.y/r;
+ if(rk.fire){
+  const a=(+$('fR').value)/mass; // aceleração do motor
+  // dentro da atmosfera sobe reto; depois mantém o ângulo escolhido em relação ao horizonte
+  const up=Math.atan2(rk.y,rk.x), th=phase==='atmo'?up:up-Math.PI/2+(+$('aR').value)*Math.PI/180;
+  rk.ang=th; ax+=a*Math.cos(th); ay+=a*Math.sin(th); rk.used+=a*dt;
+  if(rk.used>=budget){rk.used=budget;cut('Acabou o combustível! Motor desligado.');}
+ }
+ rk.vx+=ax*dt; rk.vy+=ay*dt; rk.x+=rk.vx*dt; rk.y+=rk.vy*dt; rk.t+=dt;
+ const r2=Math.hypot(rk.x,rk.y);
+ if(phase==='atmo'&&r2>=P.R+P.atm){phase='burn';toast('Saiu da atmosfera: inclinando para '+fmt(+$('aR').value,0)+'°. Corte o motor na hora certa!')}
+ if(!rk.fire&&phase!=='pad'){const sp=Math.hypot(rk.vx,rk.vy);if(sp>0.01)rk.ang=Math.atan2(rk.vy,rk.vx)}
+ if(r2<P.R){ // bateu no chão
+  if(phase==='atmo'&&rk.t<0.5){rk.x*=P.R/r2;rk.y*=P.R/r2;rk.vx=rk.vy=0;return}
+  explode(); return;
+ }
+ if(phase==='coast'){
+  const a2=Math.atan2(rk.y,rk.x); let d=a2-rk.lastA; if(d>Math.PI)d-=2*Math.PI; if(d<-Math.PI)d+=2*Math.PI; rk.swept+=Math.abs(d); rk.lastA=a2;
+  if(r2>SOI*P.R){phase='done';setTimeout(()=>result('escape'),300)}
+  else if(rk.verdict==='orbit'&&rk.swept>=Math.PI*2){phase='done';result('orbit')}
+ }
+}
+function explode(){
+ phase='done'; beep(60,.7,'sawtooth');
+ for(let i=0;i<40;i++)fx.push({x:rk.x,y:rk.y,vx:(Math.random()-.5)*8,vy:(Math.random()-.5)*8,l:1,c:Math.random()<.5?'#ffcc33':'#ff5a1f'});
+ setTimeout(()=>result('fall'),1400);
+}
+function result(kind){
+ const el=rk.el, alt=r=>Math.round((r-P.R)*kmU()).toLocaleString('pt-BR')+' km';
+ let st=0, title, msg;
+ if(kind==='orbit'){
+  st=el.e<0.08?3:el.e<0.25?2:1; if(guideUsed&&level>2)st=Math.min(st,2);
+  save.stars[level]=Math.max(save.stars[level]||0,st); save.level=Math.max(save.level,level+1); store(); hud();
+  title='EM ÓRBITA!'; msg=el.e<0.08?'Órbita quase circular. Perfeito!':el.e<0.25?'Órbita um pouco alongada.':'Órbita bem alongada, mas estável.';
+ } else if(kind==='escape'){title='FOI EMBORA!';msg='Rápido demais: o foguete escapou da gravidade do planeta e se perdeu no espaço.'}
+ else if(kind==='ground'){title='NÃO DECOLOU';msg='O empuxo precisa ser maior que o peso do foguete na plataforma.'}
+ else {title='CAIU!';msg=el&&el.rp<P.R+P.atm&&el.ra>P.R+P.atm?'A órbita passava por dentro da atmosfera: o foguete reentrou e caiu.':'Fraco demais: o foguete não ganhou velocidade suficiente e caiu de volta.'}
+ const rows=el?`<table><tbody>
+  <tr><td>Altitude mínima da órbita</td><td class="r">${el.rp<P.R?'abaixo do chão':alt(el.rp)}</td></tr>
+  <tr><td>Altitude máxima da órbita</td><td class="r">${isFinite(el.ra)&&el.ra<SOI*P.R?alt(el.ra):'sem limite'}</td></tr>
+  <tr><td>Velocidade no corte</td><td class="r">${fmt(rk.cutV*vU(),2)} km/s</td></tr>
+  <tr><td>Combustível usado</td><td class="r">${Math.round(rk.used/budget*100)} por cento</td></tr></tbody></table>`:'';
+ card(`<h2>${title}</h2>${kind==='orbit'?`<div class="big">${'★'.repeat(st)}${'☆'.repeat(3-st)}</div>`:''}<p>${msg}</p>${rows}
+ ${kind==='orbit'?'<button class="cta" id="nx">Próxima missão</button><button class="cta alt" id="ag">Repetir missão</button>':'<button class="cta" id="ag">Tentar de novo</button>'}
+ <button class="cta alt" id="mn">Menu</button>`);
+ if($('nx'))$('nx').onclick=()=>{hide();startLevel(level+1)};
+ $('ag').onclick=()=>{hide();reset()}; $('mn').onclick=menu;
+}
+function menu(){
+ card(`<h1>ÓRBITA</h1><p>Coloque o foguete em órbita. Escolha o <b>empuxo</b> do motor e o <b>ângulo de saída</b> da atmosfera, lance e toque em <b>cortar motor</b> na hora certa.</p>
+ <p>Fraco demais, ele cai e explode. Forte demais, ele escapa para o espaço. Cada missão muda o planeta e o peso do foguete.</p>
+ <button class="cta" id="pl">${save.level>1?'Continuar · missão '+save.level:'Começar'}</button>
+ ${save.level>1?'<button class="cta alt" id="rs">Recomeçar da missão 1</button>':''}
+ <a class="cta alt" href="../">← Trocar de jogo</a>
+ <p style="font-size:12px;margin-top:12px">Versão 1.0</p>`);
+ $('pl').onclick=()=>{hide();startLevel(save.level)};
+ if($('rs'))$('rs').onclick=()=>{save={level:1,stars:{}};store();hide();startLevel(1)};
+}
+
+// ===== DESENHO =====
+function resize(){const d=Math.min(2,devicePixelRatio||1);cw=stage.clientWidth;ch=stage.clientHeight;cv.width=cw*d;cv.height=ch*d;ctx.setTransform(d,0,0,d,0,0)}
+const SX=x=>cw/2+(x-cam.x)*cam.s, SY=y=>ch/2-(y-cam.y)*cam.s;
+function updateCam(dt){
+ // enquadra o planeta e o foguete (e a órbita prevista depois do corte)
+ let ext=P.R*1.35, cx=0, cy=0;
+ if(rk&&phase!=='pad'){
+  const r=Math.hypot(rk.x,rk.y); ext=Math.max(ext,r*1.15);
+  if(rk.el&&rk.verdict==='orbit')ext=Math.max(ext,rk.el.ra*1.08);
+  ext=Math.min(ext,SOI*P.R*1.1);
+ }
+ const want=Math.min(cw,ch-70)/(2*ext);
+ const k=cam.s?Math.min(1,dt*1.5):1;
+ cam.s+=(want-cam.s)*k; cam.x+=(cx-cam.x)*k; cam.y+=(cy-cam.y)*k;
+}
+function draw(){
+ ctx.fillStyle='#070b1f';ctx.fillRect(0,0,cw,ch);
+ for(const s of stars){ctx.fillStyle=`rgba(255,255,255,${.25+s[2]*.6})`;ctx.fillRect(cw/2+s[0]*cw*0.6,ch/2+s[1]*ch*0.6,1.5,1.5)}
+ const px=SX(0), py=SY(0), pr=P.R*cam.s;
+ // atmosfera
+ const ar=(P.R+P.atm)*cam.s;
+ const ag=ctx.createRadialGradient(px,py,pr,px,py,ar);ag.addColorStop(0,`rgba(${P.halo},.45)`);ag.addColorStop(1,`rgba(${P.halo},0)`);
+ ctx.fillStyle=ag;ctx.beginPath();ctx.arc(px,py,ar,0,7);ctx.fill();
+ ctx.strokeStyle=`rgba(${P.halo},.35)`;ctx.setLineDash([4,6]);ctx.beginPath();ctx.arc(px,py,ar,0,7);ctx.stroke();ctx.setLineDash([]);
+ // planeta
+ const pg=ctx.createRadialGradient(px-pr*0.35,py-pr*0.35,pr*0.1,px,py,pr);pg.addColorStop(0,P.c[0]);pg.addColorStop(1,P.c[1]);
+ ctx.fillStyle=pg;ctx.beginPath();ctx.arc(px,py,pr,0,7);ctx.fill();
+ ctx.fillStyle=P.land;ctx.globalAlpha=.55;
+ for(let i=0;i<5;i++){const a=i*1.3+0.4;ctx.beginPath();ctx.ellipse(px+Math.cos(a)*pr*0.5,py+Math.sin(a)*pr*0.45,pr*0.22,pr*0.12,a,0,7);ctx.fill()}
+ ctx.globalAlpha=1;
+ // plataforma
+ ctx.fillStyle='#ccd';ctx.fillRect(SX(-2.2),SY(P.R+0.4),4.4*cam.s,Math.max(2,0.4*cam.s));
+ // órbita circular de referência (só com guia)
+ if(guide&&rk){ctx.strokeStyle='rgba(63,224,208,.25)';ctx.setLineDash([2,8]);ctx.beginPath();ctx.arc(px,py,(P.R+P.atm*2)*cam.s,0,7);ctx.stroke();ctx.setLineDash([])}
+ // trajetória
+ if(trail.length>1){ctx.strokeStyle='rgba(255,170,90,.8)';ctx.lineWidth=2;ctx.beginPath();trail.forEach((q,i)=>i?ctx.lineTo(SX(q[0]),SY(q[1])):ctx.moveTo(SX(q[0]),SY(q[1])));ctx.stroke()}
+ if(rk&&(phase==='burn'||phase==='atmo')&&guide){const el=elements(rk.x,rk.y,rk.vx,rk.vy);const v=verdict(el);drawConic(el,v==='orbit'?'rgba(63,224,208,.9)':v==='escape'?'rgba(255,170,40,.8)':'rgba(255,80,80,.8)',[5,6])}
+ if(rk&&rk.el&&(phase==='coast'||phase==='done'))drawConic(rk.el,rk.verdict==='orbit'?'rgba(63,224,208,.9)':rk.verdict==='escape'?'rgba(255,170,40,.7)':'rgba(255,80,80,.7)',[6,6]);
+ // foguete
+ if(rk&&!(phase==='done'&&fx.length)){
+  const x=SX(rk.x), y=SY(rk.y), s=Math.max(9,2.2*cam.s);
+  ctx.save();ctx.translate(x,y);ctx.rotate(-rk.ang+Math.PI/2);
+  if(rk.fire){ctx.fillStyle='#ffcc33';ctx.beginPath();ctx.moveTo(-s*0.25,s*0.55);ctx.lineTo(0,s*(1.1+Math.random()*0.5));ctx.lineTo(s*0.25,s*0.55);ctx.fill();ctx.fillStyle='#ff7a1f';ctx.beginPath();ctx.moveTo(-s*0.15,s*0.55);ctx.lineTo(0,s*(0.85+Math.random()*0.3));ctx.lineTo(s*0.15,s*0.55);ctx.fill()}
+  ctx.fillStyle='#f2f4ff';ctx.beginPath();ctx.moveTo(0,-s*0.75);ctx.quadraticCurveTo(s*0.32,-s*0.3,s*0.24,s*0.55);ctx.lineTo(-s*0.24,s*0.55);ctx.quadraticCurveTo(-s*0.32,-s*0.3,0,-s*0.75);ctx.fill();
+  ctx.fillStyle='#e3262f';ctx.beginPath();ctx.moveTo(-s*0.24,s*0.2);ctx.lineTo(-s*0.45,s*0.62);ctx.lineTo(-s*0.22,s*0.55);ctx.fill();ctx.beginPath();ctx.moveTo(s*0.24,s*0.2);ctx.lineTo(s*0.45,s*0.62);ctx.lineTo(s*0.22,s*0.55);ctx.fill();
+  ctx.fillStyle='#3fe0d0';ctx.beginPath();ctx.arc(0,-s*0.2,s*0.11,0,7);ctx.fill();
+  ctx.restore();
+ }
+ for(const f of fx){ctx.globalAlpha=Math.max(0,f.l);ctx.fillStyle=f.c;ctx.beginPath();ctx.arc(SX(f.x),SY(f.y),Math.max(2,3*f.l),0,7);ctx.fill()}
+ ctx.globalAlpha=1;
+}
+let teleT=0;
+function tele(dt){
+ teleT+=dt; if(teleT<0.1||!rk)return; teleT=0;
+ const r=Math.hypot(rk.x,rk.y);
+ $('tAlt').textContent=Math.max(0,Math.round((r-P.R)*kmU())).toLocaleString('pt-BR')+' km';
+ $('tVel').textContent=fmt(Math.hypot(rk.vx,rk.vy)*vU(),2)+' km/s';
+ $('tFuel').style.width=(100-rk.used/budget*100)+'%';
+}
+let last=0;
+function loop(t){
+ const dt=Math.min(.05,(t-last)/1000||0); last=t;
+ if(rk&&phase!=='pad'&&phase!=='done'){
+  // atmosfera acelerada; na queima, câmera lenta para dar tempo de cortar o motor
+  const w=phase==='atmo'?2.5:phase==='coast'?warp:0.6, n=Math.ceil(w*dt*240);
+  for(let i=0;i<n&&phase!=='pad'&&phase!=='done';i++){const wasFire=rk.fire;step(w*dt/n);if(wasFire&&!rk.fire)rk.cutV=Math.hypot(rk.vx,rk.vy)}
+  if(!trail.length||Math.hypot(rk.x-trail[trail.length-1][0],rk.y-trail[trail.length-1][1])>P.R*0.01)trail.push([rk.x,rk.y]);
+  if(trail.length>4000)trail.splice(0,1000);
+ }
+ for(const f of fx){f.x+=f.vx*dt;f.y+=f.vy*dt;f.l-=dt*0.8} fx=fx.filter(f=>f.l>0);
+ updateCam(dt); draw(); tele(dt);
+ requestAnimationFrame(loop);
+}
+let actx;
+function beep(f,d,type='triangle'){try{actx=actx||new(window.AudioContext||window.webkitAudioContext)();const o=actx.createOscillator(),g=actx.createGain();o.frequency.value=f;o.type=type;g.gain.setValueAtTime(.12,actx.currentTime);g.gain.exponentialRampToValueAtTime(.001,actx.currentTime+d);o.connect(g).connect(actx.destination);o.start();o.stop(actx.currentTime+d)}catch(e){}}
+
+$('fR').oninput=$('aR').oninput=upd;
+let hold;
+document.querySelectorAll('.step[data-t]').forEach(b=>{
+ const go=()=>{if(b.disabled)return;const r=$(b.dataset.t+'R'),st=b.dataset.t==='a'?.5:+r.step||1;r.value=(+r.value+st*b.dataset.d).toFixed(1);upd()};
+ b.addEventListener('pointerdown',e=>{e.preventDefault();go();hold=setTimeout(function rep(){go();hold=setTimeout(rep,60)},350)});
+ ['pointerup','pointerleave','pointercancel'].forEach(ev=>b.addEventListener(ev,()=>clearTimeout(hold)));
+});
+$('fire').onclick=()=>{if(phase==='pad')launch();else if(phase==='atmo'||phase==='burn'){rk.cutV=Math.hypot(rk.vx,rk.vy);cut()}};
+addEventListener('keydown',e=>{if(e.code==='Space'){e.preventDefault();$('fire').click()}});
+$('guideBtn').onclick=()=>{guide=!guide;hud();if(guide&&level>2)toast('Guia ligado: a missão vale no máximo 2 estrelas.')};
+$('menuBtn').onclick=menu;
+new ResizeObserver(resize).observe(stage);
+
+resize(); startLevel(save.level); menu();
+requestAnimationFrame(loop);
+if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('../sw.js').catch(()=>{});
+}
+</script>
+</body>
+</html>
