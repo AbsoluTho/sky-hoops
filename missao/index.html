@@ -49,8 +49,9 @@ canvas{display:block;width:100%;height:100%}
 .eng{flex:1;height:84px;border-radius:20px;border:0;color:#fff;font:400 16px/1.1 Bungee,sans-serif;box-shadow:0 5px 0 rgba(0,0,0,.4);cursor:pointer;touch-action:none}
 .eng small{display:block;font:800 11px Nunito,sans-serif;opacity:.85;margin-top:3px}
 .eng.on{transform:translateY(4px);box-shadow:0 1px 0 rgba(0,0,0,.4);filter:brightness(1.15)}
-#eng{background:linear-gradient(#ffa24a,#d4560b)}
-#eng.brake{background:linear-gradient(#ff5a5f,#b5141c)}
+#acc{background:linear-gradient(#ffa24a,#d4560b)}
+#brk{background:linear-gradient(#ff5a5f,#b5141c)}
+.eng.hint{box-shadow:0 0 0 4px #ffcc33,0 5px 0 rgba(0,0,0,.4)}
 .eng:disabled{filter:grayscale(.8) brightness(.7)}
 #overlay{position:fixed;inset:0;background:rgba(5,8,24,.6);display:flex;align-items:center;justify-content:center;padding:18px;z-index:5}
 #overlay.hide{display:none}
@@ -71,7 +72,7 @@ button:focus-visible,a:focus-visible{outline:3px solid var(--acc);outline-offset
  #app{flex-direction:row}
  #stage{margin:8px 0 8px 8px}
  #controls{width:150px;flex-direction:column;justify-content:center;padding:8px 10px}
- .eng{width:100%;flex:none;height:70%}
+ .eng{width:100%;flex:none;height:42%}
 }
 @media (prefers-reduced-motion:reduce){#toast{transition:none}}
 </style>
@@ -100,7 +101,8 @@ button:focus-visible,a:focus-visible{outline:3px solid var(--acc);outline-offset
   </div>
  </div>
  <div id="controls">
-  <button class="eng" id="eng"><span id="engL">MOTOR</span><small id="engS">segure para acelerar</small></button>
+  <button class="eng" id="brk">FREAR<small>segure</small></button>
+  <button class="eng" id="acc">ACELERAR<small>segure</small></button>
  </div>
 </div>
 <div id="overlay"><div class="card" id="card"></div></div>
@@ -132,7 +134,7 @@ const store=()=>{try{localStorage.setItem('missao',JSON.stringify(save))}catch(e
 
 let phase=1, RT, MU, D, W, DIR, SOI, NEAR, KMU, VU, TU, ROUTE, budget, theta0, LAND;
 let rk=null, st='menu', trail=[], fx=[], pred=null, predT=0, warp=1, cam={x:0,y:0,s:0}, cw=0, ch=0, toastT, stars=[];
-const keys={on:0};
+const keys={acc:0,brk:0};
 
 function setupPhase(n){
  phase=n; ROUTE=ROUTES[(n-1)%ROUTES.length];
@@ -168,8 +170,8 @@ function nearTarget(x,y,t){const m=moonAt(t);return Math.hypot(x-m[0],y-m[1])<NE
 function thrustAcc(x,y,t){
  const dO=Math.hypot(x,y);
  if(nearTarget(x,y,t))return LAND; // pouso: motor forte
- if(dO<3)return 0.15;                                         // saída da órbita
- return 0.012;                                                // correção fina no caminho
+ if(!rk.cruise&&dO<3)return 0.15;                            // queima de saída (até soltar o botão pela 1ª vez)
+ return 0.008;                                                // correção fina no caminho
 }
 function accel(s,t,thr){
  const r=Math.hypot(s.x,s.y), m=moonAt(t), dx=s.x-m[0], dy=s.y-m[1], rm=Math.hypot(dx,dy);
@@ -199,36 +201,39 @@ function predict(){
  while(t<tEnd&&n<20000){
   const h=Math.min(stepSize(s,t)*3,0.05);
   let a=accel(s,t,0); s.vx+=a[0]*h/2; s.vy+=a[1]*h/2; s.x+=s.vx*h; s.y+=s.vy*h; t+=h; a=accel(s,t,0); s.vx+=a[0]*h/2; s.vy+=a[1]*h/2;
-  const m=moonAt(t), rm=Math.hypot(s.x-m[0],s.y-m[1]); if(rm<best){best=rm;bestT=t}
+  const m=moonAt(t), rm=Math.hypot(s.x-m[0],s.y-m[1]); if(rm<best){best=rm;bestT=t;var vbest=Math.hypot(s.vx-m[2],s.vy-m[3])}
   if(n%6===0)pts.push([s.x,s.y]);
   ev=check(s,t); if(ev){if(ev==='target'){const mm=moonAt(t);var vimp=Math.hypot(s.vx-mm[2],s.vy-mm[3])}break} n++;
  }
  pts.push([s.x,s.y]);
- return {pts,best,bestT,ev,vimp:typeof vimp==='number'?vimp:0};
+ const zone=ev==='target'||best<NEAR*0.9;
+ return {pts,best,bestT,ev,zone,vimp:typeof vimp==='number'?vimp:Math.sqrt((vbest||0)**2+2*MU*(1/RT-1/best))};
 }
 function predText(){
  if(st==='park')return 'Em órbita '+de(ROUTE.o)+'. Segure ACELERAR para sair rumo '+aa(ROUTE.t)+'.';
  if(!pred)return '';
- if(rk&&nearTarget(rk.x,rk.y,rk.t))return 'Aproximação final: freie até o indicador ficar verde e desça devagar.';
+ if(rk&&nearTarget(rk.x,rk.y,rk.t))return pred.ev==='target'?'Aproximação final: freie até o indicador ficar verde e desça devagar.':'Na zona de aproximação: segure FREAR para perder velocidade e ser puxado '+(ROUTE.t.de==='da'?'pela ':'por ')+ROUTE.t.n+'.';
  if(pred.ev==='target')return 'Rota: atinge '+ROUTE.t.n+'. Prepare a freada!';
+ if(pred.zone)return 'Rota: entra na zona de aproximação '+de(ROUTE.t)+'. Lá, freie para ser puxado e pousar.';
  if(pred.ev==='origin')return 'Rota: cai de volta '+em(ROUTE.o)+'.';
  if(pred.ev==='lost')return 'Rota: escapa para o espaço.';
  return 'Rota: passa a '+nf(Math.max(0,pred.best-RT)*KMU)+' km '+de(ROUTE.t)+'.';
 }
 
 // ===== LOOP DO VOO =====
-// longe da lua o motor acelera; perto dela, freia
-function burning(){if(!keys.on||!rk)return 0;return nearTarget(rk.x,rk.y,rk.t)?-1:1}
+// ACELERAR empurra a favor do movimento, FREAR contra (perto da lua, em relação à lua)
+function burning(){return (keys.acc?1:0)-(keys.brk?1:0)}
 function tick(dt){
  if(st!=='park'&&st!=='fly')return;
  const thr=rk.used<budget?burning():0;
  if(thr&&st==='park'){st='fly';rk.left=true}
+ if(st==='fly'&&!thr&&!rk.cruise){rk.cruise=true} // depois da 1ª queima, o motor fica fino para correções
  const m=moonAt(rk.t), rm=Math.hypot(rk.x-m[0],rk.y-m[1]), near=rm<NEAR;
  const rvx=rk.vx-(near?m[2]:0), rvy=rk.vy-(near?m[3]:0), relV=Math.hypot(rvx,rvy)+1e-4;
  if(st==='park')warp=1;
  else{
   const dO=Math.hypot(rk.x,rk.y)-1, dM=rm-RT, tti=Math.min(dO/(Math.hypot(rk.vx,rk.vy)+1e-4),dM/relV);
-  warp=clamp(tti/4,0.25,60); if(thr)warp=Math.min(warp,near?0.6:1);
+  warp=clamp(tti/4,0.25,60); if(thr)warp=Math.min(warp,near?0.6:rk.cruise?0.5:1); // correções em câmera lenta
  }
  let simT=dt*warp;
  while(simT>0){
@@ -245,7 +250,7 @@ function tick(dt){
  if(trail.length>6000)trail.splice(0,1500);
 }
 function finish(ev){
- st='done'; keys.on=0; setBtns(); engine(0);
+ st='done'; keys.acc=keys.brk=0; setBtns(); engine(0);
  const m=moonAt(rk.t);
  if(ev==='target'){
   const v=Math.hypot(rk.vx-m[2],rk.vy-m[3])*VU*1000, g=v*v/(2*G0*STROKE);
@@ -283,7 +288,7 @@ function hud(){
  $('tDistL').textContent=('DISTÂNCIA '+de(ROUTE.t)).toUpperCase();
  setBtns();
 }
-function setBtns(){const en=st==='park'||st==='fly';$('eng').disabled=!en}
+function setBtns(){const en=st==='park'||st==='fly';$('acc').disabled=!en;$('brk').disabled=!en}
 function intro(){
  const t=ROUTE.t, o=ROUTE.o;
  card(`<h2>Fase ${phase}</h2><p><b>${o.n} → ${t.n}</b></p>
@@ -296,14 +301,14 @@ function intro(){
 }
 function menu(){
  card(`<h1>MISSÃO ESPACIAL</h1><p>Leve o foguete da órbita do planeta até a lua e pouse com segurança.</p>
- <ol><li>Segure <b>MOTOR</b> para sair da órbita e solte para cortar na hora certa. A linha pontilhada mostra para onde você vai; quando ficar verde, você acerta a lua.</li>
- <li>No caminho, toques curtos ajustam a rota. O painel mostra quanto combustível a freada vai precisar.</li>
- <li>Perto da lua o mesmo botão vira <b>FREAR</b>. Espere o aviso <b>FREIE AGORA</b> e segure até o indicador de pouso ficar verde (menos de ${LIMIT_G} G). Depois, toques curtos para descer devagar.</li></ol>
+ <ol><li>Segure <b>ACELERAR</b> para sair da órbita e solte para cortar na hora certa. A linha pontilhada mostra para onde você vai; quando ficar verde, você acerta a lua.</li>
+ <li>Não precisa acertar a lua em cheio: basta a linha passar pela <b>zona de aproximação</b> (o círculo pontilhado em volta dela). No caminho, toques curtos em <b>ACELERAR</b> ou <b>FREAR</b> ajustam a rota. O painel mostra quanto combustível a freada vai precisar.</li>
+ <li>Perto da lua, espere o aviso <b>FREIE AGORA</b> e segure <b>FREAR</b> até o indicador de pouso ficar verde (menos de ${LIMIT_G} G). Depois, toques curtos para descer devagar.</li></ol>
  <p><b>O tanque é um só para a viagem inteira.</b> Acelerar demais na saída deixa a chegada mais rápida, e aí pode faltar combustível para frear.</p>
  <button class="cta" id="pl">${save.phase>1?'Continuar · fase '+save.phase:'Começar'}</button>
  ${save.phase>1?'<button class="cta alt" id="rs">Recomeçar da fase 1</button>':''}
  <a class="cta alt" href="../">← Trocar de jogo</a>
- <p style="font-size:12px;margin-top:12px">Versão 1.1</p>`);
+ <p style="font-size:12px;margin-top:12px">Versão 1.2</p>`);
  $('pl').onclick=()=>{hide();setupPhase(save.phase);intro()};
  if($('rs'))$('rs').onclick=()=>{save={phase:1,stars:{}};store();hide();setupPhase(1);intro()};
 }
@@ -349,10 +354,11 @@ function draw(){
  body(0,0,1,ROUTE.o,ROUTE.o.n);
  // previsão e lua "fantasma" no ponto de maior aproximação
  if((pred&&st==='fly'||pred&&st==='park')&&!nearTarget(rk.x,rk.y,rk.t)){
-  const col=pred.ev==='target'?'rgba(63,224,208,.9)':pred.ev==='origin'||pred.ev==='lost'?'rgba(255,90,90,.75)':'rgba(255,204,51,.8)';
+  const col=pred.zone?'rgba(63,224,208,.9)':pred.ev==='origin'||pred.ev==='lost'?'rgba(255,90,90,.75)':'rgba(255,204,51,.8)';
   ctx.strokeStyle=col;ctx.lineWidth=2;ctx.setLineDash([4,6]);ctx.beginPath();pred.pts.forEach((q,i)=>i?ctx.lineTo(SX(q[0]),SY(q[1])):ctx.moveTo(SX(q[0]),SY(q[1])));ctx.stroke();ctx.setLineDash([]);
   if(st==='fly'&&Math.hypot(rk.x-m[0],rk.y-m[1])>NEAR*3){const gm=moonAt(pred.bestT);ctx.strokeStyle='rgba(255,255,255,.35)';ctx.beginPath();ctx.arc(SX(gm[0]),SY(gm[1]),Math.max(4,RT*cam.s),0,7);ctx.stroke()}
  }
+ ctx.strokeStyle='rgba(63,224,208,.35)';ctx.setLineDash([2,6]);ctx.beginPath();ctx.arc(SX(m[0]),SY(m[1]),Math.max(6,NEAR*cam.s),0,7);ctx.stroke();ctx.setLineDash([]);
  body(m[0],m[1],RT,ROUTE.t,ROUTE.t.n);
  if(trail.length>1){ctx.strokeStyle='rgba(255,170,90,.75)';ctx.lineWidth=2;ctx.beginPath();trail.forEach((q,i)=>i?ctx.lineTo(SX(q[0]),SY(q[1])):ctx.moveTo(SX(q[0]),SY(q[1])));ctx.lineTo(SX(rk.x),SY(rk.y));ctx.stroke()}
  if(st!=='done'||!fx.length){
@@ -382,16 +388,16 @@ function tele(dt){
  // combustível que a freada vai pedir × o que sobrou
  {const have=Math.max(0,100-rk.used/budget*100);let need=null;
   if(near){const vf=Math.sqrt(Math.max(0,(rvx*rvx+rvy*rvy)+2*MU*(1/RT-1/rm)));need=vf*1.12/budget*100}
-  else if(pred&&pred.ev==='target'&&st==='fly')need=pred.vimp*1.12/budget*100;
+  else if(pred&&pred.zone&&st==='fly')need=pred.vimp*1.12/budget*100;
   $('tNeedBox').hidden=need==null;
   if(need!=null){$('tNeed').textContent=Math.round(need)+' por cento · você tem '+Math.round(have);$('tNeed').style.color=need>have?'#ff6b6b':need>have*0.8?'#ffcc33':'#5cff95'}}
  // indicador de pouso: velocidade e G se tocar agora
  {const L=$('land');L.hidden=!near;
   if(near){const vms=Math.hypot(rvx,rvy)*VU*1000,gg=vms*vms/(2*G0*STROKE);$('landV').textContent=fmt(vms,vms<100?1:0)+' m/s';$('landG').textContent=fmt(gg,gg<10?1:0)+' G · limite '+LIMIT_G+' G (até '+Math.round(Math.sqrt(LIMIT_G*2*G0*STROKE))+' m/s)';L.className=gg<LIMIT_G?'ok':gg<LIMIT_G*2?'mid':'bad'}}
  // alerta de começar a frear: distância para parar × altitude
- {let w=false;if(near&&st==='fly'){const a=LAND-MU/(rm*rm),v=Math.hypot(rvx,rvy),dstop=v*v/(2*Math.max(a,1e-6)),alt=rm-RT;w=alt<dstop*1.35&&Math.hypot(rvx,rvy)*VU*1000>Math.sqrt(LIMIT_G*2*G0*STROKE)&&!keys.on}$('warn').hidden=!w}
+ {let w=false;if(near&&st==='fly'){const a=LAND-MU/(rm*rm),v=Math.hypot(rvx,rvy),dstop=v*v/(2*Math.max(a,1e-6)),alt=rm-RT;w=alt<dstop*1.35&&Math.hypot(rvx,rvy)*VU*1000>Math.sqrt(LIMIT_G*2*G0*STROKE)&&!keys.brk}$('warn').hidden=!w}
  $('pred').textContent=predText();
- $('engL').textContent=near?'FREAR':'ACELERAR'; $('engS').textContent=near?'segure para desacelerar':'segure para acelerar'; $('eng').classList.toggle('brake',near);
+ $('brk').classList.toggle('hint',near&&!$('warn').hidden); // destaca o FREAR na hora do alerta
 }
 let last=0;
 function loop(t){
@@ -405,14 +411,14 @@ let actx,eng,engG;
 function engine(on){try{actx=actx||new(window.AudioContext||window.webkitAudioContext)();if(!eng){eng=actx.createOscillator();engG=actx.createGain();eng.type='sawtooth';eng.frequency.value=70;engG.gain.value=0;eng.connect(engG).connect(actx.destination);eng.start()}engG.gain.setTargetAtTime(on?0.05:0,actx.currentTime,.05)}catch(e){}}
 function beep(f,d,type='triangle'){try{actx=actx||new(window.AudioContext||window.webkitAudioContext)();const o=actx.createOscillator(),g=actx.createGain();o.frequency.value=f;o.type=type;g.gain.setValueAtTime(.12,actx.currentTime);g.gain.exponentialRampToValueAtTime(.001,actx.currentTime+d);o.connect(g).connect(actx.destination);o.start();o.stop(actx.currentTime+d)}catch(e){}}
 
-['eng'].forEach(id=>{
- const b=$(id),on=v=>{if(b.disabled)v=0;keys.on=v;b.classList.toggle('on',!!v);engine(v)};
+['acc','brk'].forEach(id=>{
+ const b=$(id),on=v=>{if(b.disabled)v=0;keys[id]=v;b.classList.toggle('on',!!v);engine(keys.acc||keys.brk)};
  b.addEventListener('pointerdown',e=>{e.preventDefault();try{b.setPointerCapture(e.pointerId)}catch(x){}on(1)});
  ['pointerup','pointercancel','lostpointercapture'].forEach(ev=>b.addEventListener(ev,()=>on(0)));
  b.addEventListener('contextmenu',e=>e.preventDefault());
 });
-addEventListener('keydown',e=>{if(e.code==='Space'||e.code==='ArrowUp'){e.preventDefault();if(st==='park'||st==='fly'){keys.on=1;engine(1)}}});
-addEventListener('keyup',e=>{if(e.code==='Space'||e.code==='ArrowUp'){keys.on=0;engine(0)}});
+addEventListener('keydown',e=>{if(st!=='park'&&st!=='fly')return;if(e.code==='ArrowUp'||e.code==='KeyW'){keys.acc=1;engine(1)}if(e.code==='ArrowDown'||e.code==='KeyS'){keys.brk=1;engine(1)}});
+addEventListener('keyup',e=>{if(e.code==='ArrowUp'||e.code==='KeyW')keys.acc=0;if(e.code==='ArrowDown'||e.code==='KeyS')keys.brk=0;engine(keys.acc||keys.brk)});
 $('menuBtn').onclick=menu;
 $('rstBtn').onclick=()=>{if(st!=='menu'){hide();reset()}};
 new ResizeObserver(resize).observe(stage);
