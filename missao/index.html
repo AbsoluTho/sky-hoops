@@ -36,12 +36,21 @@ canvas{display:block;width:100%;height:100%}
 #pred{position:absolute;left:50%;top:44px;transform:translateX(-50%);background:rgba(7,11,31,.82);color:#fff;padding:5px 12px;border-radius:12px;font-size:13px;font-weight:800;white-space:nowrap;pointer-events:none}
 #toast{position:absolute;left:50%;top:78px;transform:translateX(-50%);background:rgba(255,204,51,.95);color:#10142e;padding:7px 14px;border-radius:12px;font-size:14px;font-weight:800;max-width:92%;text-align:center;opacity:0;transition:opacity .25s;pointer-events:none}
 #toast.show{opacity:1}
+#land{position:absolute;right:10px;top:76px;background:rgba(7,11,31,.85);border:3px solid #e3262f;border-radius:16px;padding:6px 14px;color:#fff;text-align:center;pointer-events:none;min-width:150px}
+#land small{display:block;font:800 10px Nunito,sans-serif;color:#aab4e8}
+#land b{display:block;font:400 26px Bungee,sans-serif}
+#land span{font:800 14px Nunito,sans-serif}
+#land.ok{border-color:#2fd16a}#land.ok b{color:#5cff95}
+#land.mid{border-color:#ffcc33}#land.mid b{color:#ffcc33}
+#land.bad b{color:#ff6b6b}
+#warn{position:absolute;left:50%;top:44%;transform:translate(-50%,-50%);font:400 30px Bungee,sans-serif;color:#ff4d4d;text-shadow:0 3px 0 #000;pointer-events:none;animation:blink .5s steps(2) infinite}
+@keyframes blink{50%{opacity:.25}}
 #controls{background:var(--case);padding:10px 12px calc(10px + env(safe-area-inset-bottom));display:flex;gap:12px;align-items:center;justify-content:space-between}
 .eng{flex:1;height:84px;border-radius:20px;border:0;color:#fff;font:400 16px/1.1 Bungee,sans-serif;box-shadow:0 5px 0 rgba(0,0,0,.4);cursor:pointer;touch-action:none}
 .eng small{display:block;font:800 11px Nunito,sans-serif;opacity:.85;margin-top:3px}
 .eng.on{transform:translateY(4px);box-shadow:0 1px 0 rgba(0,0,0,.4);filter:brightness(1.15)}
-#brk{background:linear-gradient(#ff5a5f,#b5141c)}
-#acc{background:linear-gradient(#ffa24a,#d4560b)}
+#eng{background:linear-gradient(#ffa24a,#d4560b)}
+#eng.brake{background:linear-gradient(#ff5a5f,#b5141c)}
 .eng:disabled{filter:grayscale(.8) brightness(.7)}
 #overlay{position:fixed;inset:0;background:rgba(5,8,24,.6);display:flex;align-items:center;justify-content:center;padding:18px;z-index:5}
 #overlay.hide{display:none}
@@ -62,7 +71,7 @@ button:focus-visible,a:focus-visible{outline:3px solid var(--acc);outline-offset
  #app{flex-direction:row}
  #stage{margin:8px 0 8px 8px}
  #controls{width:150px;flex-direction:column;justify-content:center;padding:8px 10px}
- .eng{width:100%;flex:none;height:42%}
+ .eng{width:100%;flex:none;height:70%}
 }
 @media (prefers-reduced-motion:reduce){#toast{transition:none}}
 </style>
@@ -80,16 +89,18 @@ button:focus-visible,a:focus-visible{outline:3px solid var(--acc);outline-offset
   </div>
   <div id="pred">Trajetória: em órbita do planeta</div>
   <div id="toast"></div>
+  <div id="warn" hidden>FREIE AGORA!</div>
+  <div id="land" hidden><small>SE TOCAR O CHÃO AGORA</small><b id="landV">0 m/s</b><span id="landG">0 G</span></div>
   <div id="tele">
    <div class="tl"><small id="tDistL">DISTÂNCIA DA LUA</small><span id="tDist">0 km</span></div>
    <div class="tl"><small id="tVelL">VELOCIDADE</small><span id="tVel">0</span></div>
    <div class="tl" id="tAltBox" hidden><small>ALTITUDE</small><span id="tAlt">0</span></div>
+   <div class="tl" id="tNeedBox" hidden><small>PARA FREAR NA CHEGADA</small><span id="tNeed">0</span></div>
    <div class="tl"><small>COMBUSTÍVEL <span id="tFuelP">100</span></small><div class="fuel"><b id="tFuel"></b></div></div>
   </div>
  </div>
  <div id="controls">
-  <button class="eng" id="brk">FREAR<small>segure</small></button>
-  <button class="eng" id="acc">ACELERAR<small>segure</small></button>
+  <button class="eng" id="eng"><span id="engL">MOTOR</span><small id="engS">segure para acelerar</small></button>
  </div>
 </div>
 <div id="overlay"><div class="card" id="card"></div></div>
@@ -121,7 +132,7 @@ const store=()=>{try{localStorage.setItem('missao',JSON.stringify(save))}catch(e
 
 let phase=1, RT, MU, D, W, DIR, SOI, NEAR, KMU, VU, TU, ROUTE, budget, theta0, LAND;
 let rk=null, st='menu', trail=[], fx=[], pred=null, predT=0, warp=1, cam={x:0,y:0,s:0}, cw=0, ch=0, toastT, stars=[];
-const keys={acc:0,brk:0};
+const keys={on:0};
 
 function setupPhase(n){
  phase=n; ROUTE=ROUTES[(n-1)%ROUTES.length];
@@ -129,7 +140,7 @@ function setupPhase(n){
  RT=t.R/o.R; MU=GMO*t.GM/o.GM; D=t.D/o.R; DIR=t.dir;
  W=DIR*Math.sqrt(GMO/D**3);
  SOI=D*Math.pow(t.GM/o.GM,0.4);
- NEAR=Math.max(6*RT,0.25*SOI,0.15);
+ NEAR=Math.max(10*RT,0.4*SOI,0.2);
  KMU=o.R;                                           // km por unidade
  const Treal=2*Math.PI*Math.sqrt((PARK*o.R)**3/o.GM);// período real da órbita inicial (s)
  TU=Treal/6;                                        // segundos reais por segundo de jogo
@@ -138,9 +149,9 @@ function setupPhase(n){
  const vp=Math.sqrt(GMO*(2/PARK-2/(PARK+D))), dv1=vp-Math.sqrt(GMO/PARK);
  const vmoon=Math.sqrt(GMO/D), vapo=vp*PARK/D, vArr=DIR>0?Math.abs(vmoon-vapo):vmoon+vapo, vesc=Math.sqrt(2*MU/RT), vland=Math.hypot(vArr,vesc);
  // um tanque só para a viagem toda: sair da órbita + frear na chegada, com pouca folga (menos ainda nas voltas seguintes)
- budget=(dv1+vland)*Math.max(1.2,1.5-0.1*lap);
+ budget=(dv1+vland)*Math.max(1.6,2.2-0.15*lap);
  // motor de pouso forte o bastante para parar dentro da região de aproximação
- LAND=Math.max(2.2*MU/(RT*RT),(vland*1.3)**2/(2*0.4*NEAR));
+ LAND=Math.max(2.5*MU/(RT*RT),(vland*1.4)**2/(2*0.35*NEAR));
  const r=rngOf(n); theta0=r()*Math.PI*2;
  stars=Array.from({length:180},()=>[r()*2-1,r()*2-1,r()]);
  reset();
@@ -190,14 +201,15 @@ function predict(){
   let a=accel(s,t,0); s.vx+=a[0]*h/2; s.vy+=a[1]*h/2; s.x+=s.vx*h; s.y+=s.vy*h; t+=h; a=accel(s,t,0); s.vx+=a[0]*h/2; s.vy+=a[1]*h/2;
   const m=moonAt(t), rm=Math.hypot(s.x-m[0],s.y-m[1]); if(rm<best){best=rm;bestT=t}
   if(n%6===0)pts.push([s.x,s.y]);
-  ev=check(s,t); if(ev)break; n++;
+  ev=check(s,t); if(ev){if(ev==='target'){const mm=moonAt(t);var vimp=Math.hypot(s.vx-mm[2],s.vy-mm[3])}break} n++;
  }
  pts.push([s.x,s.y]);
- return {pts,best,bestT,ev};
+ return {pts,best,bestT,ev,vimp:typeof vimp==='number'?vimp:0};
 }
 function predText(){
  if(st==='park')return 'Em órbita '+de(ROUTE.o)+'. Segure ACELERAR para sair rumo '+aa(ROUTE.t)+'.';
  if(!pred)return '';
+ if(rk&&nearTarget(rk.x,rk.y,rk.t))return 'Aproximação final: freie até o indicador ficar verde e desça devagar.';
  if(pred.ev==='target')return 'Rota: atinge '+ROUTE.t.n+'. Prepare a freada!';
  if(pred.ev==='origin')return 'Rota: cai de volta '+em(ROUTE.o)+'.';
  if(pred.ev==='lost')return 'Rota: escapa para o espaço.';
@@ -205,7 +217,8 @@ function predText(){
 }
 
 // ===== LOOP DO VOO =====
-function burning(){return (keys.acc?1:0)-(keys.brk?1:0)}
+// longe da lua o motor acelera; perto dela, freia
+function burning(){if(!keys.on||!rk)return 0;return nearTarget(rk.x,rk.y,rk.t)?-1:1}
 function tick(dt){
  if(st!=='park'&&st!=='fly')return;
  const thr=rk.used<budget?burning():0;
@@ -232,7 +245,7 @@ function tick(dt){
  if(trail.length>6000)trail.splice(0,1500);
 }
 function finish(ev){
- st='done'; keys.acc=keys.brk=0; setBtns();
+ st='done'; keys.on=0; setBtns(); engine(0);
  const m=moonAt(rk.t);
  if(ev==='target'){
   const v=Math.hypot(rk.vx-m[2],rk.vy-m[3])*VU*1000, g=v*v/(2*G0*STROKE);
@@ -270,7 +283,7 @@ function hud(){
  $('tDistL').textContent=('DISTÂNCIA '+de(ROUTE.t)).toUpperCase();
  setBtns();
 }
-function setBtns(){const en=st==='park'||st==='fly';$('acc').disabled=!en;$('brk').disabled=!en}
+function setBtns(){const en=st==='park'||st==='fly';$('eng').disabled=!en}
 function intro(){
  const t=ROUTE.t, o=ROUTE.o;
  card(`<h2>Fase ${phase}</h2><p><b>${o.n} → ${t.n}</b></p>
@@ -283,14 +296,14 @@ function intro(){
 }
 function menu(){
  card(`<h1>MISSÃO ESPACIAL</h1><p>Leve o foguete da órbita do planeta até a lua e pouse com segurança.</p>
- <ol><li>Segure <b>ACELERAR</b> para sair da órbita. Solte para cortar o motor na hora certa: a linha pontilhada mostra para onde você vai.</li>
- <li>No caminho, toques curtos corrigem a rota.</li>
- <li>Perto da lua, segure <b>FREAR</b> para desacelerar. Pouse com menos de ${LIMIT_G} G: mais que isso, explode.</li></ol>
+ <ol><li>Segure <b>MOTOR</b> para sair da órbita e solte para cortar na hora certa. A linha pontilhada mostra para onde você vai; quando ficar verde, você acerta a lua.</li>
+ <li>No caminho, toques curtos ajustam a rota. O painel mostra quanto combustível a freada vai precisar.</li>
+ <li>Perto da lua o mesmo botão vira <b>FREAR</b>. Espere o aviso <b>FREIE AGORA</b> e segure até o indicador de pouso ficar verde (menos de ${LIMIT_G} G). Depois, toques curtos para descer devagar.</li></ol>
  <p><b>O tanque é um só para a viagem inteira.</b> Acelerar demais na saída deixa a chegada mais rápida, e aí pode faltar combustível para frear.</p>
  <button class="cta" id="pl">${save.phase>1?'Continuar · fase '+save.phase:'Começar'}</button>
  ${save.phase>1?'<button class="cta alt" id="rs">Recomeçar da fase 1</button>':''}
  <a class="cta alt" href="../">← Trocar de jogo</a>
- <p style="font-size:12px;margin-top:12px">Versão 1.0</p>`);
+ <p style="font-size:12px;margin-top:12px">Versão 1.1</p>`);
  $('pl').onclick=()=>{hide();setupPhase(save.phase);intro()};
  if($('rs'))$('rs').onclick=()=>{save={phase:1,stars:{}};store();hide();setupPhase(1);intro()};
 }
@@ -302,7 +315,11 @@ function updateCam(dt){
  if(!rk)return;
  const m=moonAt(rk.t), rm=Math.hypot(rk.x-m[0],rk.y-m[1]), r=Math.hypot(rk.x,rk.y);
  let cx,cy,half;
- if(rm<Math.max(NEAR*3,RT*8)){cx=(rk.x+m[0])/2;cy=(rk.y+m[1])/2;half=Math.max(rm*0.75,RT*3)}
+ if(rm<NEAR){ // pouso: enquadra o foguete e o pedaço do chão logo abaixo dele
+  const ux=(rk.x-m[0])/rm, uy=(rk.y-m[1])/rm, alt=rm-RT, gx=m[0]+ux*RT, gy=m[1]+uy*RT;
+  cx=(rk.x+gx)/2; cy=(rk.y+gy)/2; half=Math.max(alt*0.8,RT*0.06);
+  if(alt>RT*1.5){cx=(rk.x+m[0])/2;cy=(rk.y+m[1])/2;half=Math.max(rm*0.7,RT*2)}}
+ else if(rm<Math.max(NEAR*3,RT*8)){cx=(rk.x+m[0])/2;cy=(rk.y+m[1])/2;half=Math.max(rm*0.75,RT*3)}
  else if(r<4&&st!=='done'||st==='park'){cx=rk.x*0.3;cy=rk.y*0.3;half=Math.max(r*1.4,1.8)}
  else{const xs=[0,m[0],rk.x],ys=[0,m[1],rk.y];if(pred&&pred.pts)for(let i=0;i<pred.pts.length;i+=8){xs.push(pred.pts[i][0]);ys.push(pred.pts[i][1])}const x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);cx=(x0+x1)/2;cy=(y0+y1)/2;half=Math.max((x1-x0)/2*(ch-90)/cw,(y1-y0)/2)+3}
  const want=Math.min(cw,ch-90)/(2*half);
@@ -331,7 +348,7 @@ function draw(){
  ctx.strokeStyle='rgba(255,255,255,.12)';ctx.setLineDash([3,7]);ctx.beginPath();ctx.arc(SX(0),SY(0),D*cam.s,0,7);ctx.stroke();ctx.setLineDash([]);
  body(0,0,1,ROUTE.o,ROUTE.o.n);
  // previsão e lua "fantasma" no ponto de maior aproximação
- if(pred&&st==='fly'||pred&&st==='park'){
+ if((pred&&st==='fly'||pred&&st==='park')&&!nearTarget(rk.x,rk.y,rk.t)){
   const col=pred.ev==='target'?'rgba(63,224,208,.9)':pred.ev==='origin'||pred.ev==='lost'?'rgba(255,90,90,.75)':'rgba(255,204,51,.8)';
   ctx.strokeStyle=col;ctx.lineWidth=2;ctx.setLineDash([4,6]);ctx.beginPath();pred.pts.forEach((q,i)=>i?ctx.lineTo(SX(q[0]),SY(q[1])):ctx.moveTo(SX(q[0]),SY(q[1])));ctx.stroke();ctx.setLineDash([]);
   if(st==='fly'&&Math.hypot(rk.x-m[0],rk.y-m[1])>NEAR*3){const gm=moonAt(pred.bestT);ctx.strokeStyle='rgba(255,255,255,.35)';ctx.beginPath();ctx.arc(SX(gm[0]),SY(gm[1]),Math.max(4,RT*cam.s),0,7);ctx.stroke()}
@@ -362,7 +379,19 @@ function tele(dt){
  if(near){const vr=(rvx*dx+rvy*dy)/rm*VU*1000;$('tAlt').textContent=nf((rm-RT)*KMU)+' km · '+(vr<0?'descendo ':'subindo ')+fmt(Math.abs(vr),Math.abs(vr)<100?1:0)+' m/s'}
  {const f=Math.max(0,100-rk.used/budget*100);$('tFuel').style.width=f+'%';$('tFuelP').textContent=Math.round(f)+' por cento';$('tFuel').style.background=f<25?'#ff3b3b':''}
  $('hWarp').textContent='×'+(warp<1?fmt(warp,2):Math.round(warp));
+ // combustível que a freada vai pedir × o que sobrou
+ {const have=Math.max(0,100-rk.used/budget*100);let need=null;
+  if(near){const vf=Math.sqrt(Math.max(0,(rvx*rvx+rvy*rvy)+2*MU*(1/RT-1/rm)));need=vf*1.12/budget*100}
+  else if(pred&&pred.ev==='target'&&st==='fly')need=pred.vimp*1.12/budget*100;
+  $('tNeedBox').hidden=need==null;
+  if(need!=null){$('tNeed').textContent=Math.round(need)+' por cento · você tem '+Math.round(have);$('tNeed').style.color=need>have?'#ff6b6b':need>have*0.8?'#ffcc33':'#5cff95'}}
+ // indicador de pouso: velocidade e G se tocar agora
+ {const L=$('land');L.hidden=!near;
+  if(near){const vms=Math.hypot(rvx,rvy)*VU*1000,gg=vms*vms/(2*G0*STROKE);$('landV').textContent=fmt(vms,vms<100?1:0)+' m/s';$('landG').textContent=fmt(gg,gg<10?1:0)+' G · limite '+LIMIT_G+' G (até '+Math.round(Math.sqrt(LIMIT_G*2*G0*STROKE))+' m/s)';L.className=gg<LIMIT_G?'ok':gg<LIMIT_G*2?'mid':'bad'}}
+ // alerta de começar a frear: distância para parar × altitude
+ {let w=false;if(near&&st==='fly'){const a=LAND-MU/(rm*rm),v=Math.hypot(rvx,rvy),dstop=v*v/(2*Math.max(a,1e-6)),alt=rm-RT;w=alt<dstop*1.35&&Math.hypot(rvx,rvy)*VU*1000>Math.sqrt(LIMIT_G*2*G0*STROKE)&&!keys.on}$('warn').hidden=!w}
  $('pred').textContent=predText();
+ $('engL').textContent=near?'FREAR':'ACELERAR'; $('engS').textContent=near?'segure para desacelerar':'segure para acelerar'; $('eng').classList.toggle('brake',near);
 }
 let last=0;
 function loop(t){
@@ -376,14 +405,14 @@ let actx,eng,engG;
 function engine(on){try{actx=actx||new(window.AudioContext||window.webkitAudioContext)();if(!eng){eng=actx.createOscillator();engG=actx.createGain();eng.type='sawtooth';eng.frequency.value=70;engG.gain.value=0;eng.connect(engG).connect(actx.destination);eng.start()}engG.gain.setTargetAtTime(on?0.05:0,actx.currentTime,.05)}catch(e){}}
 function beep(f,d,type='triangle'){try{actx=actx||new(window.AudioContext||window.webkitAudioContext)();const o=actx.createOscillator(),g=actx.createGain();o.frequency.value=f;o.type=type;g.gain.setValueAtTime(.12,actx.currentTime);g.gain.exponentialRampToValueAtTime(.001,actx.currentTime+d);o.connect(g).connect(actx.destination);o.start();o.stop(actx.currentTime+d)}catch(e){}}
 
-['acc','brk'].forEach(id=>{
- const b=$(id),on=v=>{if(b.disabled)v=0;keys[id]=v;b.classList.toggle('on',!!v);engine(keys.acc||keys.brk)};
+['eng'].forEach(id=>{
+ const b=$(id),on=v=>{if(b.disabled)v=0;keys.on=v;b.classList.toggle('on',!!v);engine(v)};
  b.addEventListener('pointerdown',e=>{e.preventDefault();try{b.setPointerCapture(e.pointerId)}catch(x){}on(1)});
  ['pointerup','pointercancel','lostpointercapture'].forEach(ev=>b.addEventListener(ev,()=>on(0)));
  b.addEventListener('contextmenu',e=>e.preventDefault());
 });
-addEventListener('keydown',e=>{if(e.code==='ArrowUp'||e.code==='KeyW'){keys.acc=1;engine(1)}if(e.code==='ArrowDown'||e.code==='KeyS'){keys.brk=1;engine(1)}});
-addEventListener('keyup',e=>{if(e.code==='ArrowUp'||e.code==='KeyW')keys.acc=0;if(e.code==='ArrowDown'||e.code==='KeyS')keys.brk=0;engine(keys.acc||keys.brk)});
+addEventListener('keydown',e=>{if(e.code==='Space'||e.code==='ArrowUp'){e.preventDefault();if(st==='park'||st==='fly'){keys.on=1;engine(1)}}});
+addEventListener('keyup',e=>{if(e.code==='Space'||e.code==='ArrowUp'){keys.on=0;engine(0)}});
 $('menuBtn').onclick=menu;
 $('rstBtn').onclick=()=>{if(st!=='menu'){hide();reset()}};
 new ResizeObserver(resize).observe(stage);
