@@ -149,7 +149,7 @@ buildTrack('oval');
 const segAt=z=>segs[Math.floor(mod(z,L)/SEG)];
 
 // ===== ESTADO =====
-let prefs={name:'',color:'#e3262f',model:'stock',num:7,oil:true,npc:true,rain:false,track:'oval',steer:'',inv:false,sens:20,laps:3,best:{}};
+let prefs={name:'',color:'#e3262f',model:'stock',num:7,oil:true,npc:true,rain:false,bolt:true,track:'oval',steer:'',inv:false,sens:20,laps:3,best:{}};
 try{prefs=Object.assign(prefs,JSON.parse(localStorage.getItem('ovalturbo')||'{}'))}catch(e){}
 const savePrefs=()=>{try{localStorage.setItem('ovalturbo',JSON.stringify(prefs))}catch(e){}};
 const hasTilt='DeviceMotionEvent' in window&&('ontouchstart' in window||navigator.maxTouchPoints>0);
@@ -166,6 +166,12 @@ function makeTraffic(seed){
 }
 const tz=c=>mod(c.z0+c.s*(R?R.t:0),L);
 let oil=[];
+let bolts=[];
+function makeBolts(seed){
+ const r=rng(seed*11+7), out=[];
+ for(let i=0;i<6;i++)out.push({z:mod(START+9000+i*(L/6)+r()*(L/9),L),x:[-0.62,0,0.62][Math.floor(r()*3)],last:-1});
+ return out;
+}
 function makeOil(seed){
  const r=rng(seed*7+3), out=[];
  for(let i=0;i<7;i++)out.push({z:mod(START+6000+i*(L/7)+r()*(L/10),L),x:[-0.62,0,0.62][Math.floor(r()*3)]+(r()-.5)*0.2,last:-1});
@@ -184,9 +190,9 @@ function rainAt(t){
  return 0;
 }
 function newRace(laps,seed,online,opts){
- opts=opts||{oil:prefs.oil,npc:prefs.npc,rain:prefs.rain,track:prefs.track};
+ opts=opts||{oil:prefs.oil,npc:prefs.npc,rain:prefs.rain,track:prefs.track,bolt:prefs.bolt};
  buildTrack(opts.track||'oval');
- traffic=opts.npc?makeTraffic(seed):[]; oil=opts.oil?makeOil(seed):[];
+ traffic=opts.npc?makeTraffic(seed):[]; oil=opts.oil?makeOil(seed):[]; bolts=opts.bolt!==false?makeBolts(seed):[];
  R={laps,seed,online,t:0,cd:3.6,run:false,dist:0,speed:0,x:online?[-0.66,0,0.66][Math.max(0,net.me)%3]:0,lapIdx:0,lapStart:0,best:null,passes:0,fin:false,steer:0,draft:false,turbos:2,turboT:0,oilT:0,opts,rain:0,rainSched:opts.rain?makeRain(seed):null};
  if(online)R.dist=-Math.floor(Math.max(0,net.me)/3)*900;
  tilt.ok=false; document.body.classList.add('racing'); lockLandscape();
@@ -226,10 +232,9 @@ function tiltFail(why){
  card(`<h2>Inclinação indisponível</h2><p>${why}</p><p>Isso acontece quando o jogo é aberto dentro de outro app (como aqui no Claude), que bloqueia o sensor. Abra pelo link do jogo no navegador (Safari ou Chrome) ou instalado na tela inicial.</p><p>Por enquanto, use os botões ◀ ▶.</p><button class="cta" id="ok">Entendi</button>`);
  $('ok').onclick=hide;
 }
-function canTurbo(){return R&&R.run&&!R.fin&&R.online&&myPos()>1}
+function canTurbo(){return R&&R.run&&!R.fin}
 function useTurbo(){
  if(!R||!R.run||R.fin)return;
- if(!R.online||myPos()===1){say('Quem lidera não pode usar turbo.');return}
  if(R.turbos<=0){say('Sem turbo nesta volta.');return}
  if(R.turboT>0)return;
  R.turbos--;R.turboT=3;beep(220,.5,'sawtooth');say('TURBO!');
@@ -281,6 +286,8 @@ function update(dt){
  // turbo: +10 km/h por segundo durante 3 s
  if(R.turboT>0){R.turboT-=dt;if(!R.fin)R.speed+=K*10*dt}
  // poça de óleo: perde velocidade e o carro escorrega
+ // raio: pegou, ganha 50 km/h na hora (some até a próxima volta, só para quem pegou)
+ {const Pn=mod(START+R.dist,L);for(const b of bolts){const rel=mod(b.z-Pn,L),srel=rel>L/2?rel-L:rel;if(Math.abs(srel)<260&&Math.abs(b.x-R.x)<0.32&&b.last!==R.lapIdx&&!R.fin){b.last=R.lapIdx;R.speed+=K*50;beep(1200,.12);setTimeout(()=>beep(1600,.15),70);say('RAIO! +50 km/h')}}}
  R.oilT=Math.max(0,R.oilT-dt);
  {const Pn=mod(START+R.dist,L);for(const o of oil){const rel=mod(o.z-Pn,L),srel=rel>L/2?rel-L:rel;if(Math.abs(srel)<260&&Math.abs(o.x-R.x)<0.3&&o.last!==R.lapIdx&&!R.fin){o.last=R.lapIdx;R.speed*=0.78;R.oilT=0.8;R.slide=(Math.random()<.5?-1:1)*0.9;shake=0.6;beep(70,.3,'sawtooth');say('Óleo na pista!')}}}
  if(R.oilT>0)R.x+=(R.slide||0)*dt*R.oilT;
@@ -441,6 +448,20 @@ function render(){
   vis.push(s); s.f=frame;
  }
  for(let k=vis.length-1;k>=0;k--)drawSeg(vis[k],vis[k].p1.s,vis[k].p2.s);
+ // raios (flutuando sobre a pista)
+ for(const b of bolts){
+  if(R&&b.last===R.lapIdx)continue;
+  const rel=mod(b.z-pos,L); if(rel<playerZ*0.5||rel>DRAW*SEG*0.8)continue;
+  const s=segAt(b.z); if(s.f!==frame)continue;
+  const t=mod(b.z,SEG)/SEG, a=s.p1.s, c=s.p2.s, sc=lerp(a.scale,c.scale,t), sx=lerp(a.x,c.x,t);
+  const cx=sx+sc*b.x*RW*cw/2, gy=lerp(lerp(a.y0,c.y0,t),lerp(a.yb,c.yb,t),(b.x+1)/2), sz=sc*0.22*RW*cw/2;
+  if(sz<3)continue;
+  const cy=gy-sz*1.3-Math.sin(cloudT*5+b.z)*sz*0.12;
+  ctx.fillStyle='rgba(0,0,0,.3)';ctx.beginPath();ctx.ellipse(cx,gy,sz*0.5,sz*0.1,0,0,7);ctx.fill();
+  ctx.fillStyle='rgba(255,220,60,.35)';ctx.beginPath();ctx.arc(cx,cy,sz*0.8,0,7);ctx.fill();
+  ctx.fillStyle='#ffd21f';ctx.strokeStyle='#8a5a00';ctx.lineWidth=Math.max(1,sz*0.06);
+  ctx.beginPath();ctx.moveTo(cx+sz*0.15,cy-sz*0.65);ctx.lineTo(cx-sz*0.35,cy+sz*0.08);ctx.lineTo(cx-sz*0.02,cy+sz*0.08);ctx.lineTo(cx-sz*0.18,cy+sz*0.65);ctx.lineTo(cx+sz*0.38,cy-sz*0.12);ctx.lineTo(cx+sz*0.04,cy-sz*0.12);ctx.closePath();ctx.fill();ctx.stroke();
+ }
  // poças de óleo
  for(const o of oil){
   const rel=mod(o.z-pos,L); if(rel<playerZ*0.5||rel>DRAW*SEG*0.8)continue;
@@ -498,7 +519,7 @@ function hud(dt){
  $('hTime').textContent=fmtT(R.t);
  $('hPass').textContent=R.passes;
  $('drBox').hidden=!R.draft;
- $('tur').hidden=!R.online; $('turN').textContent=R.turboT>0?'···':R.turbos; $('tur').classList.toggle('off',!canTurbo()||R.turbos<=0||R.turboT>0);
+ $('tur').hidden=false; $('turN').textContent=R.turboT>0?'···':R.turbos; $('tur').classList.toggle('off',!canTurbo()||R.turbos<=0||R.turboT>0);
  if(R.online)$('hPos').textContent=myPos()+'º/'+lobby.players.filter(p=>p.on).length;
  const cd=$('cdown');
  cd.textContent=!R.run&&R.cd>0?(R.cd>3?'':Math.ceil(R.cd)):(R.run&&R.t<0.8?'VAI!':'');
@@ -572,12 +593,12 @@ function bindCar(){
 function menu(){
  if(R&&R.online&&net.on){card(`<h2>PAUSA</h2><p>Corrida online na sala <b>${net.code}</b>. O jogo continua para os outros.</p><button class="cta" id="bk">Voltar à pista</button><button class="cta alt" id="lv">Sair da sala</button>`);$('bk').onclick=hide;$('lv').onclick=leave;return}
  paused=!!R; sound.stop();
- card(`<h1>OVAL TURBO</h1><p>Corrida no oval com curvas inclinadas. Um dedo no acelerador, o outro na direção. Depois de 320 km/h, de pé embaixo na reta, quem lidera ganha 1 km/h por segundo. Quem está em 2º ganha 3 km/h por segundo e do 3º para trás, 5. Quem não lidera tem 2 turbos por volta. Cuidado com as poças de óleo. Dentro da curva perde velocidade: faça a tangência pela linha de dentro, que é mais curta. Nas curvas 1 e 2 (muro amarelo e preto) é preciso dosar o acelerador para não ir para o muro. Desvie dos carros mais lentos: bater na traseira faz perder velocidade.</p>
+ card(`<h1>OVAL TURBO</h1><p>Corrida no oval com curvas inclinadas. Um dedo no acelerador, o outro na direção. Depois de 320 km/h, de pé embaixo na reta, quem lidera ganha 1 km/h por segundo. Quem está em 2º ganha 3 km/h por segundo e do 3º para trás, 5. Todos têm 2 turbos por volta. Cuidado com as poças de óleo. Dentro da curva perde velocidade: faça a tangência pela linha de dentro, que é mais curta. Nas curvas 1 e 2 (muro amarelo e preto) é preciso dosar o acelerador para não ir para o muro. Desvie dos carros mais lentos: bater na traseira faz perder velocidade.</p>
  ${R&&!R.fin&&!R.online?'<button class="cta" id="rs">Continuar corrida</button>':''}
  <button class="cta${R&&!R.fin&&!R.online?' alt':''}" id="on">Online · corrida com a galera</button>
  <button class="cta alt" id="so">Solo · contra o relógio</button>
  <a class="cta alt" href="../" style="text-decoration:none;line-height:48px">← Trocar de jogo</a>
- <p style="font-size:12px;margin-top:12px">Versão 1.9</p>`);
+ <p style="font-size:12px;margin-top:12px">Versão 2.0</p>`);
  if($('rs'))$('rs').onclick=()=>{paused=false;hide();sound.start()};
  $('on').onclick=()=>{paused=false;onlineMenu()};
  $('so').onclick=()=>{paused=false;soloSetup()};
@@ -586,7 +607,7 @@ function optFields(o,edit){
  const row=(k,label,v)=>`<div class="field"><b>${label}</b>${edit?`<div class="seg"><button data-o="${k}" data-v="1" class="${v?'sel':''}">Sim</button><button data-o="${k}" data-v="0" class="${v?'':'sel'}">Não</button></div>`:`<b>${v?'Sim':'Não'}</b>`}</div>`;
  const tk=o.track||'oval';
  const trk=`<div class="field"><b>Pista</b>${edit?`<div class="seg">${TRACKS.map(([k,t])=>`<button data-tk="${k}" class="${tk===k?'sel':''}">${t}</button>`).join('')}</div>`:`<b>${(TRACKS.find(t=>t[0]===tk)||TRACKS[0])[1]}</b>`}</div>`;
- return trk+row('npc','Carros no tráfego',o.npc)+row('oil','Poças de óleo',o.oil)+row('rain','Chuva aleatória',o.rain);
+ return trk+row('npc','Carros no tráfego',o.npc)+row('oil','Poças de óleo',o.oil)+row('bolt','Raios de velocidade',o.bolt!==false)+row('rain','Chuva aleatória',o.rain);
 }
 function bindOpts(o,after){
  document.querySelectorAll('[data-tk]').forEach(b=>b.onclick=()=>{o.track=b.dataset.tk;document.querySelectorAll('[data-tk]').forEach(x=>x.classList.toggle('sel',x===b));after&&after()});
@@ -615,7 +636,7 @@ function finishRace(){
 
 // ===== ONLINE (conexão direta entre aparelhos, sem conta) =====
 const net={on:false,host:false,peer:null,conns:new Map(),hostConn:null,me:-1,code:'',sendT:0};
-let lobby={laps:3,players:[],started:false,seed:0,opts:{npc:true,oil:true,rain:false,track:'oval'}}, posts=[];
+let lobby={laps:3,players:[],started:false,seed:0,opts:{npc:true,oil:true,rain:false,track:'oval',bolt:true}}, posts=[];
 const CODE_CH='ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const genCode=()=>Array.from({length:5},()=>CODE_CH[Math.floor(Math.random()*CODE_CH.length)]).join('');
 const peerId=c=>'ovalturbo-v1-'+c.toLowerCase();
@@ -625,7 +646,7 @@ function loadPeer(){
  const add=src=>new Promise((ok,ko)=>{const s=document.createElement('script');s.src=src;s.onload=ok;s.onerror=ko;document.head.appendChild(s)});
  return (window.mqtt?Promise.resolve():add('../vendor/mqtt.min.js')).then(()=>add('../vendor/mp.js'));
 }
-function resetNet(){try{net.peer&&net.peer.destroy()}catch(e){}Object.assign(net,{on:false,host:false,peer:null,conns:new Map(),hostConn:null,me:-1,code:''});lobby={laps:prefs.laps,players:[],started:false,seed:0,opts:{npc:prefs.npc,oil:prefs.oil,rain:prefs.rain,track:prefs.track}};posts=[]}
+function resetNet(){try{net.peer&&net.peer.destroy()}catch(e){}Object.assign(net,{on:false,host:false,peer:null,conns:new Map(),hostConn:null,me:-1,code:''});lobby={laps:prefs.laps,players:[],started:false,seed:0,opts:{npc:prefs.npc,oil:prefs.oil,rain:prefs.rain,track:prefs.track,bolt:prefs.bolt}};posts=[]}
 function onlineMenu(code=''){
  card(`<h2>ONLINE</h2><p>Cada um corre no próprio aparelho. Uma pessoa cria a sala e os outros entram com o código.</p>
  <div class="field"><b>Seu nome</b><input id="myName" class="tin" style="max-width:60%" maxlength="14" placeholder="Nome" value="${esc(prefs.name||'')}"></div>
