@@ -210,8 +210,19 @@ function predict(){
  const zone=ev==='target'||best<NEAR*0.95;
  return {pts,best,bestT,ev,zone,vimp:typeof vimp==='number'?vimp:Math.sqrt((vbest||0)**2+2*MU*(1/RT-1/best))};
 }
+// ponto ideal de saída: acelerar quando a lua estiver adiantada o suficiente para chegar
+// lá junto com o foguete (meia volta de transferência). Começa um pouco antes, para a queima ficar centrada.
+function departInfo(){
+ const n=Math.sqrt(GMO/PARK**3), a=(PARK+D)/2, ttr=Math.PI*Math.sqrt(a**3/GMO);
+ const vp=Math.sqrt(GMO*(2/PARK-1/a)), tb=(vp-Math.sqrt(GMO/PARK))/0.15;
+ const th=Math.atan2(rk.y,rk.x), thm=theta0+W*rk.t;
+ const per=2*Math.PI/(n-W);
+ let tau=(((thm+W*ttr-th-Math.PI)%(2*Math.PI))+2*Math.PI)%(2*Math.PI)/(n-W)-tb/2;
+ if(tau<0)tau+=per;
+ return {tau,ang:th+n*tau,per};
+}
 function predText(){
- if(st==='park')return 'Em órbita '+de(ROUTE.o)+'. Segure ACELERAR para sair rumo '+aa(ROUTE.t)+'.';
+ if(st==='park'){const d=departInfo();return d.tau<0.6?'AGORA! Segure ACELERAR para sair rumo '+aa(ROUTE.t)+'.':'Comece a acelerar em '+fmt(d.tau,1)+' s, no ponto marcado na órbita.'}
  if(!pred)return '';
  if(rk&&nearTarget(rk.x,rk.y,rk.t))return pred.ev==='target'?'Aproximação final: freie até o indicador ficar verde e desça devagar.':'Na zona de aproximação: segure FREAR para perder velocidade e ser puxado '+(ROUTE.t.de==='da'?'pela ':'por ')+ROUTE.t.n+'.';
  if(pred.ev==='target')return 'Rota: atinge '+ROUTE.t.n+'. Prepare a freada!';
@@ -404,7 +415,7 @@ function menu(){
  <button class="cta" id="pl">${save.phase>1?'Continuar · fase '+save.phase:'Começar'}</button>
  ${save.phase>1?'<button class="cta alt" id="rs">Recomeçar da fase 1</button>':''}
  <a class="cta alt" href="../">← Trocar de jogo</a>
- <p style="font-size:12px;margin-top:12px">Versão 2.0</p>`);
+ <p style="font-size:12px;margin-top:12px">Versão 2.1</p>`);
  $('pl').onclick=()=>{hide();setupPhase(save.phase);intro()};
  if($('rs'))$('rs').onclick=()=>{save={phase:1,stars:{}};store();hide();setupPhase(1);intro()};
 }
@@ -456,6 +467,24 @@ function draw(){
  }
  ctx.strokeStyle='rgba(63,224,208,.35)';ctx.setLineDash([2,6]);ctx.beginPath();ctx.arc(SX(m[0]),SY(m[1]),Math.max(6,NEAR*cam.s),0,7);ctx.stroke();ctx.setLineDash([]);
  body(m[0],m[1],RT,ROUTE.t,ROUTE.t.n);
+ // em órbita: marcador do ponto ideal para começar a acelerar
+ if(st==='park'){
+  const d=departInfo(), mx=SX(PARK*Math.cos(d.ang)), my=SY(PARK*Math.sin(d.ang)), go=d.tau<0.6;
+  ctx.strokeStyle='rgba(255,255,255,.18)';ctx.setLineDash([2,5]);ctx.beginPath();ctx.arc(SX(0),SY(0),PARK*cam.s,0,7);ctx.stroke();ctx.setLineDash([]);
+  ctx.fillStyle=go?'#5cff95':'#ffcc33';ctx.beginPath();ctx.arc(mx,my,go?9:7,0,7);ctx.fill();
+  ctx.strokeStyle=ctx.fillStyle;ctx.lineWidth=2;ctx.beginPath();ctx.arc(mx,my,13+Math.sin(performance.now()/150)*2,0,7);ctx.stroke();
+  ctx.font='800 12px Nunito,sans-serif';ctx.textAlign='center';ctx.fillText(go?'ACELERE!':'acelere aqui',mx,my-20);
+ }
+ // seta na borda da tela quando a lua estiver fora de vista
+ {const px=SX(m[0]),py=SY(m[1]),pad=34;
+  if(px<pad||px>cw-pad||py<pad+30||py>ch-pad-50){
+   const cx=cw/2,cy=ch/2,dx=px-cx,dy=py-cy,k=Math.min((cw/2-pad)/Math.abs(dx||1e-6),(ch/2-pad-40)/Math.abs(dy||1e-6)),ax=cx+dx*k,ay=cy+dy*k,an=Math.atan2(dy,dx);
+   ctx.save();ctx.translate(ax,ay);ctx.rotate(an);ctx.fillStyle='#d6d6dc';ctx.beginPath();ctx.moveTo(14,0);ctx.lineTo(-8,-9);ctx.lineTo(-8,9);ctx.closePath();ctx.fill();ctx.restore();
+   ctx.font='800 12px Nunito,sans-serif';ctx.textAlign='center';ctx.fillStyle='#d6d6dc';
+   const dist=Math.max(0,Math.hypot(rk.x-m[0],rk.y-m[1])-RT)*KMU;
+   const lt=ROUTE.t.n+' · '+nf(dist)+' km', lw=ctx.measureText(lt).width/2+8, lx=clamp(ax,lw+6,cw-lw-6), ly=ay>ch/2?ay-18:ay+24;
+   ctx.fillStyle='rgba(7,11,31,.75)';ctx.fillRect(lx-lw,ly-12,lw*2,17);ctx.fillStyle='#d6d6dc';ctx.fillText(lt,lx,ly);
+  }}
  if(trail.length>1){ctx.strokeStyle='rgba(255,170,90,.75)';ctx.lineWidth=2;ctx.beginPath();trail.forEach((q,i)=>i?ctx.lineTo(SX(q[0]),SY(q[1])):ctx.moveTo(SX(q[0]),SY(q[1])));ctx.lineTo(SX(rk.x),SY(rk.y));ctx.stroke()}
  if(st!=='done'||!fx.length){
   const near=Math.hypot(rk.x-m[0],rk.y-m[1])<NEAR, rvx=rk.vx-(near?m[2]:0), rvy=rk.vy-(near?m[3]:0);
