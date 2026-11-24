@@ -142,7 +142,7 @@ function setupPhase(n){
  RT=t.R/o.R; MU=GMO*t.GM/o.GM; D=t.D/o.R; DIR=t.dir;
  W=DIR*Math.sqrt(GMO/D**3);
  SOI=D*Math.pow(t.GM/o.GM,0.4);
- NEAR=Math.max(10*RT,0.4*SOI,0.2);
+ NEAR=Math.max(12*RT,0.5*SOI,0.25);
  KMU=o.R;                                           // km por unidade
  const Treal=2*Math.PI*Math.sqrt((PARK*o.R)**3/o.GM);// período real da órbita inicial (s)
  TU=Treal/6;                                        // segundos reais por segundo de jogo
@@ -160,7 +160,7 @@ function setupPhase(n){
 }
 function rngOf(seed){let s=seed*9301+49297;return()=>{s=(s*9301+49297)%233280;return s/233280}}
 function reset(){
- rk={x:PARK,y:0,vx:0,vy:Math.sqrt(GMO/PARK),t:0,used:0,left:false,ang:Math.PI/2,burn:0,cutV:0};
+ LD=null; rk={x:PARK,y:0,vx:0,vy:Math.sqrt(GMO/PARK),t:0,used:0,left:false,ang:Math.PI/2,burn:0,cutV:0};
  st='park'; trail=[]; fx=[]; pred=null; predT=0; cam.s=0; hud();
 }
 const moonAt=t=>{const a=theta0+W*t;return [D*Math.cos(a),D*Math.sin(a),-W*D*Math.sin(a),W*D*Math.cos(a)]};
@@ -184,7 +184,7 @@ function accel(s,t,thr){
 }
 function stepSize(s,t){
  const m=moonAt(t), dO=Math.hypot(s.x,s.y)-1, dM=Math.hypot(s.x-m[0],s.y-m[1])-RT, v=Math.hypot(s.vx,s.vy)+0.02;
- return clamp(0.04*Math.min(Math.max(dO,0.02),Math.max(dM,RT*0.05))/v,1e-5,0.01);
+ return clamp(0.05*Math.min(Math.max(dO,0.02),Math.max(dM,NEAR*0.5))/v,2e-4,0.02);
 }
 function check(s,t){
  const m=moonAt(t), r=Math.hypot(s.x,s.y), rm=Math.hypot(s.x-m[0],s.y-m[1]);
@@ -198,15 +198,16 @@ function predict(){
  const s={x:rk.x,y:rk.y,vx:rk.vx,vy:rk.vy}; let t=rk.t, best=1e9, bestT=t, ev=null; const pts=[[s.x,s.y]];
  const tEnd=t+Math.max(60,2.6*Math.PI/Math.sqrt(GMO/((PARK+D)/2)**3));
  let n=0;
- while(t<tEnd&&n<20000){
-  const h=Math.min(stepSize(s,t)*3,0.05);
+ while(t<tEnd&&n<4000){
+  const h=clamp(stepSize(s,t)*5,0.01,0.12);
   let a=accel(s,t,0); s.vx+=a[0]*h/2; s.vy+=a[1]*h/2; s.x+=s.vx*h; s.y+=s.vy*h; t+=h; a=accel(s,t,0); s.vx+=a[0]*h/2; s.vy+=a[1]*h/2;
   const m=moonAt(t), rm=Math.hypot(s.x-m[0],s.y-m[1]); if(rm<best){best=rm;bestT=t;var vbest=Math.hypot(s.vx-m[2],s.vy-m[3])}
-  if(n%6===0)pts.push([s.x,s.y]);
+  if(n%3===0)pts.push([s.x,s.y]);
+  if(rm<NEAR*0.9&&!ev){ev=null;pts.push([s.x,s.y]);break}
   ev=check(s,t); if(ev){if(ev==='target'){const mm=moonAt(t);var vimp=Math.hypot(s.vx-mm[2],s.vy-mm[3])}break} n++;
  }
  pts.push([s.x,s.y]);
- const zone=ev==='target'||best<NEAR*0.9;
+ const zone=ev==='target'||best<NEAR*0.95;
  return {pts,best,bestT,ev,zone,vimp:typeof vimp==='number'?vimp:Math.sqrt((vbest||0)**2+2*MU*(1/RT-1/best))};
 }
 function predText(){
@@ -243,11 +244,12 @@ function tick(dt){
   a=accel(rk,rk.t,th); rk.vx+=a[0]*h/2; rk.vy+=a[1]*h/2;
   if(th){rk.used+=thrustAcc(rk.x,rk.y,rk.t)*h;rk.burn=th}else rk.burn=0;
   const ev=check(rk,rk.t); if(ev){finish(ev);return}
+  {const mm=moonAt(rk.t);if(Math.hypot(rk.x-mm[0],rk.y-mm[1])<NEAR){startLanding();return}}
  }
  if(rk.used>=budget&&burning()&&!rk.emptyMsg){rk.emptyMsg=1;toast('Acabou o combustível!')}
  if(rk.t*TU>30*86400){finish('time');return}
  if(!trail.length||Math.hypot(rk.x-trail[trail.length-1][0],rk.y-trail[trail.length-1][1])>Math.min(0.05,NEAR*0.05))trail.push([rk.x,rk.y]);
- if(trail.length>6000)trail.splice(0,1500);
+ if(trail.length>1500)trail.splice(0,500);
 }
 function finish(ev){
  st='done'; keys.acc=keys.brk=0; setBtns(); engine(0);
@@ -279,6 +281,100 @@ function resultCard(title,msg,sts,v,g,ok){
  $('ag').onclick=()=>{hide();reset()}; $('mn').onclick=menu;
 }
 
+// ===== POUSO (tela própria, movimento só na vertical, cálculo leve) =====
+let LD=null;
+function startLanding(){
+ const t=ROUTE.t, m=moonAt(rk.t), dx=rk.x-m[0], dy=rk.y-m[1], rm=Math.hypot(dx,dy);
+ const rv=Math.hypot(rk.vx-m[2],rk.vy-m[3])*VU*1000;                 // m/s
+ const R=t.R*1000, mu=t.GM*1e9, g0=mu/(R*R);
+ const h0=Math.min((rm-RT)*KMU*1000, 40*R);                          // altitude inicial (m)
+ const tank=budget*VU*1000, fuel=Math.max(0,(budget-rk.used)*VU*1000);
+ // motor de pouso: forte o bastante para parar no meio do caminho
+ const A=Math.max(3*g0, rv*rv/(0.6*h0));
+ LD={h:h0,h0,v:-rv,v0:rv,A,g0,R,mu,fuel,tank,t:0,stop:0};
+ st='land'; keys.acc=0; setBtns(); trail=[]; pred=null;
+ toast('Chegando '+aa(t)+'! Freie no ponto marcado e pouse com menos de '+LIMIT_G+' G.',3200);
+}
+const gAt=h=>LD.mu/((LD.R+h)**2);
+function landTick(dt){
+ if(st!=='land')return;
+ const brk=keys.brk&&LD.fuel>0;
+ const tti=LD.h/Math.max(-LD.v,1);
+ // tempo acelerado lá em cima, câmera lenta perto do chão
+ warp=clamp(tti/2.2,1,6000);
+ // freando, o tempo também depende de quanto falta para a velocidade zerar (evita "pular" para cima)
+ if(brk){const tz=Math.abs(LD.v)/Math.max(LD.A-LD.g0,0.01);warp=Math.min(warp,Math.max(1,tti/3.5),Math.max(0.5,tz/2.5))}
+ if(LD.v>0)warp=Math.min(warp,Math.max(1,LD.v/Math.max(LD.g0,0.01)/3));
+ let T=dt*warp; const n=Math.min(300,Math.ceil(T/0.05)); const h=T/n;
+ for(let i=0;i<n;i++){
+  const a=-gAt(LD.h)+(brk&&LD.fuel>0?LD.A:0);
+  LD.v+=a*h; LD.h+=LD.v*h; LD.t+=h;
+  if(brk){LD.fuel-=LD.A*h;if(LD.fuel<=0){LD.fuel=0;toast('Acabou o combustível!')}}
+  if(LD.h<=0){LD.h=0;return landEnd(Math.abs(LD.v))}
+  if(LD.v>0&&LD.h>LD.h0*1.3)return landEnd(-1);
+ }
+ rk.burn=brk?-1:0;
+ {const v=-LD.v;LD.stop=v>0?v*v/(2*Math.max(LD.A-LD.g0,0.01)):0}
+}
+function landEnd(v){
+ st='done'; keys.acc=keys.brk=0; setBtns(); engine(0); $('warn').hidden=true;
+ rk.used=budget-LD.fuel/(VU*1000); rk.t+=LD.t/TU;
+ if(v<0)return resultCard('NÃO POUSOU',`Freou demais: o foguete parou, voltou a subir e se afastou ${de(ROUTE.t)}.`,0);
+ const g=v*v/(2*G0*STROKE);
+ if(g<LIMIT_G){
+  const fuel=LD.fuel/LD.tank, sts=g<0.7&&fuel>0.15?3:g<1.3?2:1;
+  save.stars[phase]=Math.max(save.stars[phase]||0,sts); save.phase=Math.max(save.phase,phase+1); store();
+  beep(660,.15);setTimeout(()=>beep(990,.3),150);
+  return resultCard('POUSOU!',`Pouso ${em(ROUTE.t)} com ${fmt(g,2)} G.`,sts,v,g,true);
+ }
+ LD.boom=1; beep(60,.7,'sawtooth');
+ setTimeout(()=>resultCard('EXPLODIU!',`Tocou o chão ${de(ROUTE.t)} rápido demais: ${fmt(g,1)} G (limite ${LIMIT_G} G).`,0,v,g,false),1200);
+}
+const fmtAlt=m=>m>=10000?nf(m/1000)+' km':m>=1000?fmt(m/1000,1)+' km':Math.round(m)+' m';
+// régua de altitude em escala logarítmica: o chão fica embaixo, o ponto de chegada em cima
+function altY(h){const top=150,bot=ch-84,L=Math.log10(1+Math.max(0,h)/10),Lm=Math.log10(1+LD.h0*1.1/10);return bot-(bot-top)*L/Lm}
+function drawLanding(){
+ ctx.fillStyle='#070b1f';ctx.fillRect(0,0,cw,ch);
+ for(const s of stars){ctx.fillStyle=`rgba(255,255,255,${.2+s[2]*.6})`;ctx.fillRect(cw/2+s[0]*cw*0.6,ch/2+s[1]*ch*0.6,1.4,1.4)}
+ const t=ROUTE.t, gy=ch-70;
+ ctx.textBaseline='alphabetic';
+ // chão
+ const g=ctx.createLinearGradient(0,gy,0,ch);g.addColorStop(0,t.c[0]);g.addColorStop(1,t.c[1]);ctx.fillStyle=g;
+ ctx.beginPath();ctx.moveTo(0,ch);ctx.lineTo(0,gy+18);ctx.quadraticCurveTo(cw/2,gy-14,cw,gy+18);ctx.lineTo(cw,ch);ctx.fill();
+ ctx.fillStyle='rgba(0,0,0,.18)';for(let i=0;i<7;i++){const x=(i*0.17+0.05)*cw;ctx.beginPath();ctx.ellipse(x,gy+30+(i%3)*10,18+(i%3)*8,5+(i%2)*2,0,0,7);ctx.fill()}
+ ctx.fillStyle='#ccd';ctx.fillRect(cw/2-30,gy-3,60,4);
+ // régua
+ const rx=80;ctx.strokeStyle='rgba(255,255,255,.35)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(rx,altY(LD.h0*1.1));ctx.lineTo(rx,gy);ctx.stroke();
+ ctx.font='800 11px Nunito,sans-serif';ctx.textAlign='right';ctx.fillStyle='rgba(255,255,255,.7)';
+ for(const m of [10,100,1000,1e4,1e5,1e6,1e7]){if(m>LD.h0*1.1)break;const y=altY(m);ctx.fillRect(rx-5,y,10,1);ctx.fillText(fmtAlt(m),rx-8,y+4)}
+ // ponto de freada: altitude em que é preciso começar a frear com o motor todo
+ const v=-LD.v, dstop=LD.stop;
+ if(v>0){const y=altY(dstop*1.15);ctx.strokeStyle='#ffcc33';ctx.setLineDash([6,5]);ctx.beginPath();ctx.moveTo(rx,y);ctx.lineTo(cw-20,y);ctx.stroke();ctx.setLineDash([]);ctx.textAlign='left';ctx.fillStyle='#ffcc33';ctx.fillText('ponto de freada',rx+8,y-5)}
+ // foguete
+ if(!LD.boom){
+  const y=Math.min(gy-14,altY(LD.h)), x=cw/2, s=26;
+  ctx.save();ctx.translate(x,y);
+  if(rk.burn){ctx.fillStyle='#ffcc33';ctx.beginPath();ctx.moveTo(-s*0.22,s*0.55);ctx.lineTo(0,s*(1.2+Math.random()*0.6));ctx.lineTo(s*0.22,s*0.55);ctx.fill();ctx.fillStyle='#ff7a1f';ctx.beginPath();ctx.moveTo(-s*0.12,s*0.55);ctx.lineTo(0,s*(0.9+Math.random()*0.3));ctx.lineTo(s*0.12,s*0.55);ctx.fill()}
+  ctx.fillStyle='#f2f4ff';ctx.beginPath();ctx.moveTo(0,-s*0.75);ctx.quadraticCurveTo(s*0.32,-s*0.3,s*0.24,s*0.55);ctx.lineTo(-s*0.24,s*0.55);ctx.quadraticCurveTo(-s*0.32,-s*0.3,0,-s*0.75);ctx.fill();
+  ctx.fillStyle='#e3262f';ctx.beginPath();ctx.moveTo(-s*0.24,s*0.2);ctx.lineTo(-s*0.45,s*0.62);ctx.lineTo(-s*0.22,s*0.55);ctx.fill();ctx.beginPath();ctx.moveTo(s*0.24,s*0.2);ctx.lineTo(s*0.45,s*0.62);ctx.lineTo(s*0.22,s*0.55);ctx.fill();
+  ctx.fillStyle='#3fe0d0';ctx.beginPath();ctx.arc(0,-s*0.2,s*0.11,0,7);ctx.fill();
+  ctx.restore();
+ } else {for(let i=0;i<24;i++){ctx.fillStyle=i%2?'#ffcc33':'#ff5a1f';ctx.beginPath();ctx.arc(cw/2+(Math.random()-.5)*80,gy-10-Math.random()*50,4,0,7);ctx.fill()}}
+}
+function landTele(){
+ const v=-LD.v, vms=Math.abs(LD.v), gg=vms*vms/(2*G0*STROKE);
+ $('tDistL').textContent='ALTITUDE'; $('tDist').textContent=fmtAlt(LD.h);
+ $('tVelL').textContent=LD.v<0?'DESCENDO':'SUBINDO'; $('tVel').textContent=fmt(vms,vms<100?1:0)+' m/s';
+ $('tAltBox').hidden=true; $('tNeedBox').hidden=false;
+ const need=Math.max(0,v)*1.15/LD.tank*100, have=LD.fuel/LD.tank*100;
+ $('tNeed').textContent=Math.round(need)+' por cento · você tem '+Math.round(have);$('tNeed').style.color=need>have?'#ff6b6b':need>have*0.8?'#ffcc33':'#5cff95';
+ $('tFuel').style.width=have+'%'; $('tFuelP').textContent=Math.round(have)+' por cento'; $('tFuel').style.background=have<25?'#ff3b3b':'';
+ const L=$('land');L.hidden=false;$('landV').textContent=fmt(vms,vms<100?1:0)+' m/s';$('landG').textContent=fmt(gg,gg<10?1:0)+' G · limite '+LIMIT_G+' G (até '+Math.round(Math.sqrt(LIMIT_G*2*G0*STROKE))+' m/s)';L.className=gg<LIMIT_G?'ok':gg<LIMIT_G*2?'mid':'bad';
+ const w=v>Math.sqrt(LIMIT_G*2*G0*STROKE)&&LD.h<LD.stop*1.15&&!keys.brk; $('warn').hidden=!w; $('brk').classList.toggle('hint',w);
+ $('hWarp').textContent='×'+(warp<10?fmt(warp,1):nf(warp));
+ $('pred').textContent=LD.v>0?'Subindo! Solte o FREAR para voltar a descer.':'Pouso '+em(ROUTE.t)+': freie a partir do ponto marcado.';
+}
+
 // ===== TELAS =====
 function card(h){$('card').innerHTML=h;$('overlay').classList.remove('hide')}
 function hide(){$('overlay').classList.add('hide')}
@@ -288,7 +384,7 @@ function hud(){
  $('tDistL').textContent=('DISTÂNCIA '+de(ROUTE.t)).toUpperCase();
  setBtns();
 }
-function setBtns(){const en=st==='park'||st==='fly';$('acc').disabled=!en;$('brk').disabled=!en}
+function setBtns(){const en=st==='park'||st==='fly'||st==='land';$('acc').disabled=!(st==='park'||st==='fly');$('brk').disabled=!en}
 function intro(){
  const t=ROUTE.t, o=ROUTE.o;
  card(`<h2>Fase ${phase}</h2><p><b>${o.n} → ${t.n}</b></p>
@@ -303,12 +399,12 @@ function menu(){
  card(`<h1>MISSÃO ESPACIAL</h1><p>Leve o foguete da órbita do planeta até a lua e pouse com segurança.</p>
  <ol><li>Segure <b>ACELERAR</b> para sair da órbita e solte para cortar na hora certa. A linha pontilhada mostra para onde você vai; quando ficar verde, você acerta a lua.</li>
  <li>Não precisa acertar a lua em cheio: basta a linha passar pela <b>zona de aproximação</b> (o círculo pontilhado em volta dela). No caminho, toques curtos em <b>ACELERAR</b> ou <b>FREAR</b> ajustam a rota. O painel mostra quanto combustível a freada vai precisar.</li>
- <li>Perto da lua, espere o aviso <b>FREIE AGORA</b> e segure <b>FREAR</b> até o indicador de pouso ficar verde (menos de ${LIMIT_G} G). Depois, toques curtos para descer devagar.</li></ol>
+ <li>Ao entrar na zona, abre a tela de pouso. Quando o foguete chegar à linha amarela (<b>ponto de freada</b>), segure <b>FREAR</b> até o indicador ficar verde (menos de ${LIMIT_G} G). Depois, toques curtos para descer devagar. Freou demais? O foguete volta a subir.</li></ol>
  <p><b>O tanque é um só para a viagem inteira.</b> Acelerar demais na saída deixa a chegada mais rápida, e aí pode faltar combustível para frear.</p>
  <button class="cta" id="pl">${save.phase>1?'Continuar · fase '+save.phase:'Começar'}</button>
  ${save.phase>1?'<button class="cta alt" id="rs">Recomeçar da fase 1</button>':''}
  <a class="cta alt" href="../">← Trocar de jogo</a>
- <p style="font-size:12px;margin-top:12px">Versão 1.2</p>`);
+ <p style="font-size:12px;margin-top:12px">Versão 2.0</p>`);
  $('pl').onclick=()=>{hide();setupPhase(save.phase);intro()};
  if($('rs'))$('rs').onclick=()=>{save={phase:1,stars:{}};store();hide();setupPhase(1);intro()};
 }
@@ -402,9 +498,9 @@ function tele(dt){
 let last=0;
 function loop(t){
  const dt=Math.min(.05,(t-last)/1000||0); last=t;
- tick(dt);
- predT-=dt; if(rk&&(st==='fly'||st==='park')&&predT<=0){pred=predict();predT=burning()?0.15:0.5}
- updateCam(dt); draw(); tele(dt);
+ tick(dt); landTick(dt);
+ predT-=dt; if(rk&&(st==='fly'||st==='park')&&predT<=0){pred=predict();predT=burning()?0.3:0.8}
+ if(st==='land'||(st==='done'&&LD&&LD.h<=LD.h0*1.3&&LD.t>0)){drawLanding();if(st==='land')landTele()}else{updateCam(dt); draw(); tele(dt)}
  requestAnimationFrame(loop);
 }
 let actx,eng,engG;
@@ -417,7 +513,7 @@ function beep(f,d,type='triangle'){try{actx=actx||new(window.AudioContext||windo
  ['pointerup','pointercancel','lostpointercapture'].forEach(ev=>b.addEventListener(ev,()=>on(0)));
  b.addEventListener('contextmenu',e=>e.preventDefault());
 });
-addEventListener('keydown',e=>{if(st!=='park'&&st!=='fly')return;if(e.code==='ArrowUp'||e.code==='KeyW'){keys.acc=1;engine(1)}if(e.code==='ArrowDown'||e.code==='KeyS'){keys.brk=1;engine(1)}});
+addEventListener('keydown',e=>{if(st!=='park'&&st!=='fly'&&st!=='land')return;if(e.code==='ArrowUp'||e.code==='KeyW'){keys.acc=1;engine(1)}if(e.code==='ArrowDown'||e.code==='KeyS'){keys.brk=1;engine(1)}});
 addEventListener('keyup',e=>{if(e.code==='ArrowUp'||e.code==='KeyW')keys.acc=0;if(e.code==='ArrowDown'||e.code==='KeyS')keys.brk=0;engine(keys.acc||keys.brk)});
 $('menuBtn').onclick=menu;
 $('rstBtn').onclick=()=>{if(st!=='menu'){hide();reset()}};
