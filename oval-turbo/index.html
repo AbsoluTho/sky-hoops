@@ -36,6 +36,7 @@ canvas{display:block;width:100%;height:100%}
 .pd{pointer-events:auto;border:0;border-radius:20px;font:400 15px Bungee,sans-serif;color:#fff;width:96px;height:96px;box-shadow:0 5px 0 rgba(0,0,0,.45);touch-action:none;cursor:pointer;opacity:.88}
 .pd.on{transform:translateY(4px);box-shadow:0 1px 0 rgba(0,0,0,.45);opacity:1}
 #gas{background:linear-gradient(#3bd16f,#1c9a48);width:110px;height:130px}
+#brk{background:linear-gradient(#ff5a5f,#b5141c)}
 #tur{background:linear-gradient(#ff9a1f,#d4560b);font-size:13px;line-height:1.1}
 #tur.off{filter:grayscale(1) brightness(.7);opacity:.6}
 #tur b{display:block;font-size:22px}
@@ -73,7 +74,8 @@ td.r{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 small{color:var(--mut)}
 [hidden]{display:none!important}
 button:focus-visible,input:focus-visible{outline:3px solid var(--yel);outline-offset:2px}
-@media (orientation:portrait){.pd{width:80px;height:80px;font-size:13px}#gas{width:92px;height:110px}.str{width:68px;height:68px}}
+@media (orientation:portrait){.pd{width:74px;height:74px;font-size:12px}#gas{width:92px;height:110px}.str{width:62px;height:62px}}
+@media (orientation:landscape) and (max-height:520px){.grp{gap:8px}.pd{width:76px;height:76px;font-size:12px}.str{width:66px;height:76px;font-size:26px}#gas{width:100px;height:118px}}
 #rot{position:fixed;inset:0;z-index:8;background:#15161a;display:none;flex-direction:column;align-items:center;justify-content:center;gap:18px;text-align:center;padding:24px;font:400 20px/1.2 Bungee,sans-serif}
 #rot p{font:600 15px Nunito,sans-serif;color:#aab;margin:0;max-width:300px}
 #rot i{display:block;width:70px;height:110px;border:6px solid #fff;border-radius:14px;animation:turn 1.6s ease-in-out infinite}
@@ -98,7 +100,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--yel);outline-of
  <div id="cdown"></div>
  <div id="msg"></div>
  <div id="pedals">
-  <div class="grp"><button class="pd" id="tur" hidden>TURBO<b id="turN">2</b></button><button class="pd str" id="lft" aria-label="Esquerda">◀</button><button class="pd str" id="rgt" aria-label="Direita">▶</button></div>
+  <div class="grp"><button class="pd" id="brk">FREIO</button><button class="pd" id="tur" hidden>TURBO<b id="turN">2</b></button><button class="pd str" id="lft" aria-label="Esquerda">◀</button><button class="pd str" id="rgt" aria-label="Direita">▶</button></div>
   <div class="grp"><button class="pd" id="gas">ACELERA</button></div>
  </div>
 </div>
@@ -156,7 +158,7 @@ const hasTilt='DeviceMotionEvent' in window&&('ontouchstart' in window||navigato
 if(!prefs.steer)prefs.steer='buttons';
 const CARCOLS=['#e3262f','#1f6fe0','#ffcc00','#22b35a','#ff7a00','#8a3ffc','#f2f2f2','#15161a'];
 let R=null, frame=0, cw=0, ch=0, bgOff=0, shake=0, sparks=0, traffic=[];
-const keys={}, btn={gas:0,lft:0,rgt:0};
+const keys={}, btn={gas:0,brk:0,lft:0,rgt:0};
 
 function rng(seed){return()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
 function makeTraffic(seed){
@@ -166,12 +168,26 @@ function makeTraffic(seed){
 }
 const tz=c=>mod(c.z0+c.s*(R?R.t:0),L);
 let oil=[];
-let bolts=[];
-function makeBolts(seed){
- const r=rng(seed*11+7), out=[];
- for(let i=0;i<6;i++)out.push({z:mod(START+9000+i*(L/6)+r()*(L/9),L),x:[-0.62,0,0.62][Math.floor(r()*3)],last:-1});
- return out;
+// raios: de 1 a 3 por volta, sorteados volta a volta (iguais para todos da sala).
+// Quem pega primeiro leva: o raio some para todos.
+let boltOn=false, boltSeed=0, boltCache={}, boltTaken=new Set();
+function lapBolts(k){
+ if(!boltOn||k<0)return [];
+ if(boltCache[k])return boltCache[k];
+ const r=rng(boltSeed*31+k*977+5), n=1+Math.floor(r()*3), out=[], span=(L-14000)/n;
+ for(let i=0;i<n;i++)out.push({i,k,z:mod(START+7000+i*span+r()*span*0.8,L),x:[-0.62,0,0.62][Math.floor(r()*3)]});
+ return boltCache[k]=out;
 }
+let boltAsked=new Set();
+function boltBoost(){if(!R)return;R.speed+=MAXS/KMH*50;beep(1200,.12);setTimeout(()=>beep(1600,.15),70);say('RAIO! +50 km/h')}
+// no online quem decide é o anfitrião: o primeiro pedido que chega leva o raio
+function takeBolt(key){
+ if(boltTaken.has(key))return false;
+ if(!R||!R.online||net.host){boltTaken.add(key);if(R&&R.online)bcast({t:'bolt',k:key,by:net.me});return true}
+ if(!boltAsked.has(key)){boltAsked.add(key);if(net.hostConn&&net.hostConn.open)net.hostConn.send({t:'bolt',k:key})}
+ return false;
+}
+function boltNews(d){if(boltTaken.has(d.k))return;boltTaken.add(d.k);if(d.by===net.me)boltBoost()}
 function makeOil(seed){
  const r=rng(seed*7+3), out=[];
  for(let i=0;i<7;i++)out.push({z:mod(START+6000+i*(L/7)+r()*(L/10),L),x:[-0.62,0,0.62][Math.floor(r()*3)]+(r()-.5)*0.2,last:-1});
@@ -192,7 +208,7 @@ function rainAt(t){
 function newRace(laps,seed,online,opts){
  opts=opts||{oil:prefs.oil,npc:prefs.npc,rain:prefs.rain,track:prefs.track,bolt:prefs.bolt};
  buildTrack(opts.track||'oval');
- traffic=opts.npc?makeTraffic(seed):[]; oil=opts.oil?makeOil(seed):[]; bolts=opts.bolt!==false?makeBolts(seed):[];
+ traffic=opts.npc?makeTraffic(seed):[]; oil=opts.oil?makeOil(seed):[]; boltOn=opts.bolt!==false; boltSeed=seed; boltCache={}; boltTaken=new Set(); boltAsked=new Set();
  R={laps,seed,online,t:0,cd:3.6,run:false,dist:0,speed:0,x:online?[-0.66,0,0.66][Math.max(0,net.me)%3]:0,lapIdx:0,lapStart:0,best:null,passes:0,fin:false,steer:0,draft:false,turbos:2,turboT:0,oilT:0,opts,rain:0,rainSched:opts.rain?makeRain(seed):null};
  if(online)R.dist=-Math.floor(Math.max(0,net.me)/3)*900;
  tilt.ok=false; document.body.classList.add('racing'); lockLandscape();
@@ -260,7 +276,7 @@ function update(dt){
  }
  R.t+=dt;
  const P=mod(START+R.dist,L), seg=segAt(P), sp=R.speed/MAXS, dx=dt*2*sp;
- const gas=keys.ArrowUp||keys.KeyW||keys.Space||btn.gas, brk=keys.ArrowDown||keys.KeyS;
+ const gas=keys.ArrowUp||keys.KeyW||keys.Space||btn.gas, brk=keys.ArrowDown||keys.KeyS||btn.brk;
  R.steer=R.fin?0:steerInput();
  // força centrífuga cresce com o quadrado da velocidade; a inclinação ajuda, mas não resolve sozinha
  // na chuva a direção responde menos e a curva empurra mais para fora
@@ -286,8 +302,8 @@ function update(dt){
  // turbo: +10 km/h por segundo durante 3 s
  if(R.turboT>0){R.turboT-=dt;if(!R.fin)R.speed+=K*10*dt}
  // poça de óleo: perde velocidade e o carro escorrega
- // raio: pegou, ganha 50 km/h na hora (some até a próxima volta, só para quem pegou)
- {const Pn=mod(START+R.dist,L);for(const b of bolts){const rel=mod(b.z-Pn,L),srel=rel>L/2?rel-L:rel;if(Math.abs(srel)<260&&Math.abs(b.x-R.x)<0.32&&b.last!==R.lapIdx&&!R.fin){b.last=R.lapIdx;R.speed+=K*50;beep(1200,.12);setTimeout(()=>beep(1600,.15),70);say('RAIO! +50 km/h')}}}
+ // raio: quem passar primeiro ganha 50 km/h na hora
+ if(R.dist>0&&!R.fin){const Pn=mod(START+R.dist,L);for(const b of lapBolts(R.lapIdx)){const key=b.k+':'+b.i;if(boltTaken.has(key))continue;const rel=mod(b.z-Pn,L),srel=rel>L/2?rel-L:rel;if(Math.abs(srel)<260&&Math.abs(b.x-R.x)<0.32&&takeBolt(key))boltBoost()}}
  R.oilT=Math.max(0,R.oilT-dt);
  {const Pn=mod(START+R.dist,L);for(const o of oil){const rel=mod(o.z-Pn,L),srel=rel>L/2?rel-L:rel;if(Math.abs(srel)<260&&Math.abs(o.x-R.x)<0.3&&o.last!==R.lapIdx&&!R.fin){o.last=R.lapIdx;R.speed*=0.78;R.oilT=0.8;R.slide=(Math.random()<.5?-1:1)*0.9;shake=0.6;beep(70,.3,'sawtooth');say('Óleo na pista!')}}}
  if(R.oilT>0)R.x+=(R.slide||0)*dt*R.oilT;
@@ -449,8 +465,8 @@ function render(){
  }
  for(let k=vis.length-1;k>=0;k--)drawSeg(vis[k],vis[k].p1.s,vis[k].p2.s);
  // raios (flutuando sobre a pista)
- for(const b of bolts){
-  if(R&&b.last===R.lapIdx)continue;
+ for(const b of lapBolts(R?Math.max(0,R.lapIdx):0)){
+  if(boltTaken.has(b.k+':'+b.i))continue;
   const rel=mod(b.z-pos,L); if(rel<playerZ*0.5||rel>DRAW*SEG*0.8)continue;
   const s=segAt(b.z); if(s.f!==frame)continue;
   const t=mod(b.z,SEG)/SEG, a=s.p1.s, c=s.p2.s, sc=lerp(a.scale,c.scale,t), sx=lerp(a.x,c.x,t);
@@ -502,7 +518,7 @@ function render(){
  }
  if(inTunnel){ctx.fillStyle='rgba(0,0,0,.28)';ctx.fillRect(-20,-20,cw+40,ch+40)}
  // seu carro, inclinado junto com a pista
- const brk=keys.ArrowDown||keys.KeyS||(R&&R.run&&!btn.gas&&!keys.ArrowUp&&!keys.KeyW&&!keys.Space), pw=CARW*RW/CAM_H*cw/2;
+ const brk=keys.ArrowDown||keys.KeyS||btn.brk||(R&&R.run&&!btn.gas&&!keys.ArrowUp&&!keys.KeyW&&!keys.Space), pw=CARW*RW/CAM_H*cw/2;
  const pang=px>=-1&&px<=1?-Math.atan2(bank*BANK_H,2*RW):0;
  tiltCar(cw/2,ch-4,pw,pang,prefs.color,prefs.num,brk,(R?R.steer:0)*pw*0.04,prefs.model);
  if(R&&R.turboT>0){ctx.fillStyle='rgba(255,170,40,.85)';for(let i=0;i<6;i++){const fx=cw/2+(Math.random()-.5)*pw*0.5;ctx.beginPath();ctx.ellipse(fx,ch-pw*0.12+Math.random()*6,pw*0.05,pw*0.09,0,0,7);ctx.fill()}}
@@ -593,12 +609,12 @@ function bindCar(){
 function menu(){
  if(R&&R.online&&net.on){card(`<h2>PAUSA</h2><p>Corrida online na sala <b>${net.code}</b>. O jogo continua para os outros.</p><button class="cta" id="bk">Voltar à pista</button><button class="cta alt" id="lv">Sair da sala</button>`);$('bk').onclick=hide;$('lv').onclick=leave;return}
  paused=!!R; sound.stop();
- card(`<h1>OVAL TURBO</h1><p>Corrida no oval com curvas inclinadas. Um dedo no acelerador, o outro na direção. Depois de 320 km/h, de pé embaixo na reta, quem lidera ganha 1 km/h por segundo. Quem está em 2º ganha 3 km/h por segundo e do 3º para trás, 5. Todos têm 2 turbos por volta. Cuidado com as poças de óleo. Dentro da curva perde velocidade: faça a tangência pela linha de dentro, que é mais curta. Nas curvas 1 e 2 (muro amarelo e preto) é preciso dosar o acelerador para não ir para o muro. Desvie dos carros mais lentos: bater na traseira faz perder velocidade.</p>
+ card(`<h1>OVAL TURBO</h1><p>Corrida no oval com curvas inclinadas. Um dedo no acelerador, o outro na direção. Depois de 320 km/h, de pé embaixo na reta, quem lidera ganha 1 km/h por segundo. Quem está em 2º ganha 3 km/h por segundo e do 3º para trás, 5. Todos têm 2 turbos por volta. Os raios na pista dão +50 km/h, mas só para quem pegar primeiro. Cuidado com as poças de óleo. Dentro da curva perde velocidade: faça a tangência pela linha de dentro, que é mais curta. Nas curvas 1 e 2 (muro amarelo e preto) é preciso dosar o acelerador para não ir para o muro. Desvie dos carros mais lentos: bater na traseira faz perder velocidade.</p>
  ${R&&!R.fin&&!R.online?'<button class="cta" id="rs">Continuar corrida</button>':''}
  <button class="cta${R&&!R.fin&&!R.online?' alt':''}" id="on">Online · corrida com a galera</button>
  <button class="cta alt" id="so">Solo · contra o relógio</button>
  <a class="cta alt" href="../" style="text-decoration:none;line-height:48px">← Trocar de jogo</a>
- <p style="font-size:12px;margin-top:12px">Versão 2.0</p>`);
+ <p style="font-size:12px;margin-top:12px">Versão 2.1</p>`);
  if($('rs'))$('rs').onclick=()=>{paused=false;hide();sound.start()};
  $('on').onclick=()=>{paused=false;onlineMenu()};
  $('so').onclick=()=>{paused=false;soloSetup()};
@@ -703,6 +719,7 @@ function hostData(c,d){
   if(lobby.started)c.send({t:'go',lobby,late:1});
  } else if(d.t==='pos'){const e=net.conns.get(c.peer);if(e)Object.assign(ps[e.i],{d:d.d,x:d.x,sp:d.sp})}
  else if(d.t==='fin'){const e=net.conns.get(c.peer);if(e)recordFin(e.i,d.time)}
+ else if(d.t==='bolt'){const e=net.conns.get(c.peer);if(e&&!boltTaken.has(d.k)){boltTaken.add(d.k);bcast({t:'bolt',k:d.k,by:e.i})}}
 }
 function hostDrop(c){const e=net.conns.get(c.peer);if(!e)return;net.conns.delete(c.peer);lobby.players[e.i].on=0;say(lobby.players[e.i].name+' saiu');sendLobby()}
 function hostStart(){
@@ -732,6 +749,7 @@ async function joinRoom(code){
    else if(d.t==='go')onGo(d);
    else if(d.t==='pos')onPos(d);
    else if(d.t==='res')onRes(d);
+   else if(d.t==='bolt')boltNews(d);
    else if(d.t==='bye'){net.on=false;netError('O anfitrião encerrou a sala.')}
   });
   c.on('close',()=>{if(net.on)netError('A conexão com a sala caiu. O anfitrião saiu ou a internet oscilou.')});
@@ -783,7 +801,7 @@ function resultsCard(){
 }
 
 // ===== CONTROLES =====
-['gas','lft','rgt'].forEach(id=>{
+['gas','brk','lft','rgt'].forEach(id=>{
  const b=$(id),on=v=>{btn[id]=v;b.classList.toggle('on',!!v)};
  b.addEventListener('pointerdown',e=>{e.preventDefault();try{b.setPointerCapture(e.pointerId)}catch(x){}on(1);sound.start()});
  ['pointerup','pointercancel','lostpointercapture'].forEach(ev=>b.addEventListener(ev,()=>on(0)));
